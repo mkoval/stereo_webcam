@@ -110,14 +110,24 @@ EyeCam::EyeCam(std::string file) {
 		m_bufs[i].ptr = mmap(NULL, buffer.length, PROT_READ | PROT_WRITE,
 		                     MAP_SHARED, m_fd, buffer.m.offset);
 		m_bufs[i].len = buffer.length;
-
 		if (m_bufs[i].ptr == MAP_FAILED) {
 			// XXX: Free memory with munmap() before failing.
 			throw "err: memory map failed";
 		}
+
+		// Begin by enqueing all of the buffers.
+		ret = ioctl(m_fd, VIDIOC_QBUF, &buffer);
+		if (ret == -1) {
+			throw "err: unable to enqueue memory-mapped buffer";
+		}
 	}
 
-	// TODO: Remember to munmap() in the destructor.
+	// Enable streaming.
+	ret = ioctl(m_fd, VIDIOC_STREAMON, &req_bufs.type);
+	if (ret == -1) {
+		throw "err: unable to enable streaming";
+	}
+
 }
 
 EyeCam::~EyeCam(void) {

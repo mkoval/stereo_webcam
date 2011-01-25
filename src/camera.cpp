@@ -23,6 +23,9 @@ public:
 
 	void GetFrame(void);
 	void WaitForFrame(int to_ms) const;
+
+	uint32_t GetWidth(void) const;
+	uint32_t GetHeight(void) const;
 	void SetResolution(uint32_t width, uint32_t height);
 
 	double GetFPS(void) const;
@@ -135,6 +138,7 @@ EyeCam::EyeCam(std::string file) {
 		throw "err: unable to enable streaming";
 	}
 
+#if 0
 	std::list<uint32_t> fmt = GetPixelFormats();
 	std::list<uint32_t>::iterator fmt_it;
 	for (fmt_it = fmt.begin(); fmt_it != fmt.end(); ++fmt_it) {
@@ -154,6 +158,7 @@ EyeCam::EyeCam(std::string file) {
 			}
 		}
 	}
+#endif
 
 	// Fetch default configuration data from the camera.
 	GetParam(m_param);
@@ -177,9 +182,8 @@ void EyeCam::SetFPS(uint32_t fps) {
 	uint32_t fps_new = m_param.parm.capture.timeperframe.denominator
 	                 / m_param.parm.capture.timeperframe.numerator;
 	if (fps != fps_new) {
-		throw "err: unable to set FPS";
+		throw "err: invalid frame rate";
 	}
-
 }
 
 double EyeCam::GetFPS(void) const {
@@ -188,14 +192,22 @@ double EyeCam::GetFPS(void) const {
 	return denom / numer;
 }
 
+uint32_t EyeCam::GetWidth(void) const {
+	return m_fmt_pix.fmt.pix.width;
+}
+
+uint32_t EyeCam::GetHeight(void) const {
+	return m_fmt_pix.fmt.pix.height;
+}
+
 void EyeCam::SetResolution(uint32_t width, uint32_t height) {
 	m_fmt_pix.fmt.pix.width  = width;
 	m_fmt_pix.fmt.pix.height = height;
-	m_fmt_pix.fmt.pix.priv   = !!(width == 640);
+
 	SetFormat(m_fmt_pix);
 
 	if (m_fmt_pix.fmt.pix.width != width || m_fmt_pix.fmt.pix.height != height) {
-		throw "err: unable to set resolution";
+		throw "err: invalid resolution";
 	}
 }
 
@@ -215,6 +227,7 @@ void EyeCam::GetParam(v4l2_streamparm &param) {
 
 void EyeCam::SetParam(v4l2_streamparm const &param) {
 	int ret = ioctl(m_fd, VIDIOC_S_PARM, &param);
+	ret = ioctl(m_fd, VIDIOC_S_PARM, &param); // HACK
 
 	if (ret == -1) {
 		throw "err: unable to set device parameters";
@@ -232,6 +245,7 @@ void EyeCam::GetFormat(v4l2_format &fmt) {
 
 void EyeCam::SetFormat(v4l2_format const &fmt) {
 	int ret = ioctl(m_fd, VIDIOC_S_FMT, &fmt);
+	ret = ioctl(m_fd, VIDIOC_S_FMT, &fmt); // HACK
 
 	if (ret == -1) {
 		throw "err: unable to set video format";
@@ -328,20 +342,24 @@ int main(int argc, char **argv) {
 	try {
 		EyeCam camera(argv[1]);
 
-#if 0
-		std::cout << "Frame Rate is " << camera.GetFPS() << " FPS" << std::endl;
-		camera.SetFPS(10);
-		std::cout << "Frame Rate is " << camera.GetFPS() << " FPS" << std::endl;
+		std::cout << "BEGIN:\n"
+		          << "\tResolution = " << camera.GetWidth()  << " x "
+		                               << camera.GetHeight() <<  "\n"
+		          << "\tFPS        = " << camera.GetFPS()    << std::endl;
 
-		std::cout << ">>> SetResolution(640, 480)" << std::endl;
-		camera.SetResolution(640, 480);
-		camera.SetFPS(30);
-		std::cout << std::endl;
+		// XXX: SetFPS() test
+		camera.SetFPS(50); // valid: 60, 50, 40, 30, 15 (60 fails...)
+		std::cout << "BEGIN:\n"
+		          << "\tResolution = " << camera.GetWidth()  << " x "
+		                               << camera.GetHeight() <<  "\n"
+		          << "\tFPS        = " << camera.GetFPS()    << std::endl;
 
-		std::cout << ">>> SetResolution(320, 240)" << std::endl;
+		// XXX: SetResolution() test
 		camera.SetResolution(320, 240);
-		camera.SetFPS(60);
-#endif
+		std::cout << "SET1:\n"
+		          << "\tResolution = " << camera.GetWidth()  << " x "
+		                               << camera.GetHeight() <<  "\n"
+		          << "\tFPS        = " << camera.GetFPS()    << std::endl;
 
 	} catch (char const *str) {
 		std::cout << str << std::endl;

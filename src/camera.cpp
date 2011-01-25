@@ -77,9 +77,6 @@ EyeCam::EyeCam(std::string file) {
 		}
 	}
 
-	GetParam(m_param);
-	GetFormat(m_fmt_pix);
-
 	// Request the appropriate number of buffers or mmap IO.
 	v4l2_requestbuffers req_bufs;
 	req_bufs.count  = m_nbufs;
@@ -128,6 +125,75 @@ EyeCam::EyeCam(std::string file) {
 		throw "err: unable to enable streaming";
 	}
 
+
+	// Enumerate over image formats (i.e. RGB vs YUV).
+	v4l2_fmtdesc it_desc;
+	it_desc.index = 0;
+	it_desc.type  = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+
+	for (;;) {
+		ret = ioctl(m_fd, VIDIOC_ENUM_FMT, &it_desc);
+
+		if (!ret) {
+			std::cout << "pix fmt: " << it_desc.description << std::endl;
+		} else if (errno == EINVAL) {
+			break; // Iteration is complete
+		} else {
+			throw "err: unable to detect formats";
+		}
+
+		++it_desc.index;
+	}
+
+	// Enumerate over frame sizes.
+	// TODO: For all pixel formats.
+	v4l2_frmsizeenum it_size;
+	it_size.index        = 0;
+	it_size.pixel_format = V4L2_PIX_FMT_YUYV;
+	for (;;) {
+		ret = ioctl(m_fd, VIDIOC_ENUM_FRAMESIZES, &it_size);
+
+		if (!ret) {
+			// TODO: Handle the non-discrete case.
+			int width  = it_size.discrete.width;
+			int height = it_size.discrete.height;
+			std::cout << "frame size: " << width << " x " << height << std::endl;
+		} else if (errno = EINVAL) {
+			break; // Iteration is complete
+		} else {
+			throw "err: unable to detect frame sizes";
+		}
+
+		++it_size.index;
+	}
+
+	// Enumerate over all frame intervals.
+	// TODO: For all frame sizes and pixel formats.
+	v4l2_frmivalenum it_interval;
+	it_interval.index        = 0;
+	it_interval.pixel_format = V4L2_PIX_FMT_YUYV;
+	it_interval.width        = 640;
+	it_interval.height       = 480;
+
+	for (;;) {
+		ret = ioctl(m_fd, VIDIOC_ENUM_FRAMEINTERVALS, &it_interval);
+
+		if (!ret) {
+			// TODO: Handle the non-discrete case.
+			double fps = (double)it_interval.discrete.denominator /
+			             it_interval.discrete.numerator;
+			std::cout << "fps: " << fps << std::endl;
+		} else if (errno = EINVAL) {
+			break; // Iteration is complete
+		} else {
+			throw "err: unable to detect frame intervals";
+		}
+		++it_interval.index;
+	}
+
+	// Fetch default configuration data from the camera.
+	GetParam(m_param);
+	GetFormat(m_fmt_pix);
 }
 
 EyeCam::~EyeCam(void) {
@@ -143,6 +209,13 @@ void EyeCam::SetFPS(uint32_t fps) {
 	m_param.parm.capture.timeperframe.numerator   = 1;
 	m_param.parm.capture.timeperframe.denominator = fps;
 	SetParam(m_param);
+
+	uint32_t fps_new = m_param.parm.capture.timeperframe.denominator
+	                 / m_param.parm.capture.timeperframe.numerator;
+	if (fps != fps_new) {
+		throw "err: unable to set FPS";
+	}
+
 }
 
 double EyeCam::GetFPS(void) const {
@@ -154,6 +227,7 @@ double EyeCam::GetFPS(void) const {
 void EyeCam::SetResolution(uint32_t width, uint32_t height) {
 	m_fmt_pix.fmt.pix.width  = width;
 	m_fmt_pix.fmt.pix.height = height;
+	m_fmt_pix.fmt.pix.priv   = !!(width == 640);
 	SetFormat(m_fmt_pix);
 
 	if (m_fmt_pix.fmt.pix.width != width || m_fmt_pix.fmt.pix.height != height) {
@@ -210,16 +284,21 @@ int main(int argc, char **argv) {
 	try {
 		EyeCam camera(argv[1]);
 
+#if 0
 		std::cout << "Frame Rate is " << camera.GetFPS() << " FPS" << std::endl;
-		camera.SetFPS(60);
+		camera.SetFPS(10);
 		std::cout << "Frame Rate is " << camera.GetFPS() << " FPS" << std::endl;
+#endif
+
+		std::cout << ">>> SetResolution(640, 480)" << std::endl;
+		camera.SetResolution(640, 480);
+		camera.SetFPS(30);
+		std::cout << std::endl;
 
 		std::cout << ">>> SetResolution(320, 240)" << std::endl;
 		camera.SetResolution(320, 240);
-		std::cout << std::endl;
+		camera.SetFPS(60);
 
-		std::cout << ">>> SetResolution(640, 480)" << std::endl;
-		camera.SetResolution(320, 240);
 	} catch (char const *str) {
 		std::cout << str << std::endl;
 	}

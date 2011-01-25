@@ -1,4 +1,5 @@
 #include <iostream>
+#include <list>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,11 @@ public:
 	void SetFPS(uint32_t fps);
 
 private:
+	struct Resolution {
+		uint32_t width;
+		uint32_t height;
+	};
+
 	struct Buffer {
 		void  *ptr;
 		size_t len;
@@ -38,6 +44,10 @@ private:
 	v4l2_streamparm     m_param;
 	v4l2_format         m_fmt_pix;
 	std::vector<Buffer> m_bufs;
+
+	std::list<uint32_t>   GetPixelFormats(void) const;
+	std::list<Resolution> GetResolutions(uint32_t pixel_format) const;
+	std::list<double>     GetFPSs(uint32_t pixel_format, Resolution res) const;
 
 	void GetParam(v4l2_streamparm &param);
 	void SetParam(v4l2_streamparm const &param);
@@ -126,80 +136,6 @@ EyeCam::EyeCam(std::string file) {
 	}
 
 
-	// Enumerate over image formats (i.e. RGB vs YUV).
-	v4l2_fmtdesc it_desc;
-	it_desc.index = 0;
-	it_desc.type  = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-
-	uint32_t tmp_pixel;
-
-	for (;;) {
-		ret = ioctl(m_fd, VIDIOC_ENUM_FMT, &it_desc);
-
-		if (!ret) {
-			std::cout << "pix fmt: " << it_desc.description << std::endl;
-			tmp_pixel = it_desc.pixelformat;
-		} else if (errno == EINVAL) {
-			break; // Iteration is complete
-		} else {
-			throw "err: unable to detect formats";
-		}
-
-		++it_desc.index;
-	}
-
-	// Enumerate over frame sizes.
-	// TODO: For all pixel formats.
-	v4l2_frmsizeenum it_size;
-	it_size.index        = 0;
-	it_size.pixel_format = tmp_pixel;
-
-	uint32_t tmp_width;
-	uint32_t tmp_height;
-
-	for (;;) {
-		ret = ioctl(m_fd, VIDIOC_ENUM_FRAMESIZES, &it_size);
-
-		if (!ret) {
-			// TODO: Handle the non-discrete case.
-			int width  = it_size.discrete.width;
-			int height = it_size.discrete.height;
-			std::cout << "frame size: " << width << " x " << height << std::endl;
-
-			tmp_width  = width;
-			tmp_height = height;
-		} else if (errno = EINVAL) {
-			break; // Iteration is complete
-		} else {
-			throw "err: unable to detect frame sizes";
-		}
-
-		++it_size.index;
-	}
-
-	// Enumerate over all frame intervals.
-	// TODO: For all frame sizes and pixel formats.
-	v4l2_frmivalenum it_interval;
-	it_interval.index        = 0;
-	it_interval.pixel_format = tmp_pixel;
-	it_interval.width        = tmp_width;
-	it_interval.height       = tmp_height;
-
-	for (;;) {
-		ret = ioctl(m_fd, VIDIOC_ENUM_FRAMEINTERVALS, &it_interval);
-
-		if (!ret) {
-			// TODO: Handle the non-discrete case.
-			double fps = (double)it_interval.discrete.denominator /
-			             it_interval.discrete.numerator;
-			std::cout << "fps: " << fps << std::endl;
-		} else if (errno = EINVAL) {
-			break; // Iteration is complete
-		} else {
-			throw "err: unable to detect frame intervals";
-		}
-		++it_interval.index;
-	}
 
 	// Fetch default configuration data from the camera.
 	GetParam(m_param);
@@ -281,6 +217,85 @@ void EyeCam::SetFormat(v4l2_format const &fmt) {
 
 	if (ret == -1) {
 		throw "err: unable to set video format";
+	}
+}
+
+std::list<uint32_t> EyeCam::GetPixelFormats(void) const {
+	std::list<uint32_t> formats;
+	v4l2_fmtdesc it;
+	int ret;
+
+	it.index = 0;
+	it.type  = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+
+	for (;;) {
+		ret = ioctl(m_fd, VIDIOC_ENUM_FMT, &it);
+
+		if (!ret) {
+			formats.push_back(it.pixelformat);
+		} else if (errno == EINVAL) {
+			break; // Iteration is complete
+		} else {
+			throw "err: unable to detect formats";
+		}
+
+		++it.index;
+	}
+	return formats;
+}
+
+std::list<EyeCam::Resolution> EyeCam::GetResolutions(uint32_t pixel_format) const {
+	std::list<Resolution> resolutions;
+	v4l2_frmsizeenum it;
+	int ret;
+
+	it.index        = 0;
+	it.pixel_format = pixel_format;
+
+	for (;;) {
+		ret = ioctl(m_fd, VIDIOC_ENUM_FRAMESIZES, &it);
+
+		if (!ret) {
+			// TODO: Handle the non-discrete case.
+			Resolution resolution;
+			resolution.width  = it.discrete.width;
+			resolution.height = it.discrete.height;
+			resolutions.push_back(resolution);
+		} else if (errno = EINVAL) {
+			break; // Iteration is complete
+		} else {
+			throw "err: unable to detect frame sizes";
+		}
+
+		++it.index;
+	}
+	return resolutions;
+}
+
+std::list<double> EyeCam::GetFPSs(uint32_t pixel_format, Resolution res) const {
+	std::list<double> fpss;
+	v4l2_frmivalenum it_interval;
+	int ret;
+
+	it_interval.index        = 0;
+	it_interval.pixel_format = pixel_format;
+	it_interval.width        = res.width;
+	it_interval.height       = res.height;
+
+	for (;;) {
+		ret = ioctl(m_fd, VIDIOC_ENUM_FRAMEINTERVALS, &it_interval);
+
+		if (!ret) {
+			// TODO: Handle the non-discrete case.
+			double fps = (double)it_interval.discrete.denominator /
+			             it_interval.discrete.numerator;
+			fpss.push_back(fps);
+		} else if (errno = EINVAL) {
+			break; // Iteration is complete
+		} else {
+			throw "err: unable to detect frame intervals";
+		}
+		++it_interval.index;
 	}
 }
 

@@ -135,7 +135,25 @@ EyeCam::EyeCam(std::string file) {
 		throw "err: unable to enable streaming";
 	}
 
+	std::list<uint32_t> fmt = GetPixelFormats();
+	std::list<uint32_t>::iterator fmt_it;
+	for (fmt_it = fmt.begin(); fmt_it != fmt.end(); ++fmt_it) {
+		std::list<Resolution> res = GetResolutions(*fmt_it);
+		std::list<Resolution>::iterator res_it;
 
+		std::cout << "fmt = " << *fmt_it << std::endl;
+
+		for (res_it = res.begin(); res_it != res.end(); ++res_it) {
+			std::list<double> fps = GetFPSs(*fmt_it, *res_it);
+			std::list<double>::iterator fps_it;
+
+			std::cout << "\tres = " << res_it->width << " x " << res_it->height << std::endl;
+
+			for (fps_it = fps.begin(); fps_it != fps.end(); ++fps_it) {
+				std::cout << "\t\tfps = " << *fps_it << std::endl;
+			}
+		}
+	}
 
 	// Fetch default configuration data from the camera.
 	GetParam(m_param);
@@ -274,29 +292,30 @@ std::list<EyeCam::Resolution> EyeCam::GetResolutions(uint32_t pixel_format) cons
 
 std::list<double> EyeCam::GetFPSs(uint32_t pixel_format, Resolution res) const {
 	std::list<double> fpss;
-	v4l2_frmivalenum it_interval;
+	v4l2_frmivalenum it;
 	int ret;
 
-	it_interval.index        = 0;
-	it_interval.pixel_format = pixel_format;
-	it_interval.width        = res.width;
-	it_interval.height       = res.height;
+	it.index        = 0;
+	it.pixel_format = pixel_format;
+	it.width        = res.width;
+	it.height       = res.height;
 
 	for (;;) {
-		ret = ioctl(m_fd, VIDIOC_ENUM_FRAMEINTERVALS, &it_interval);
+		ret = ioctl(m_fd, VIDIOC_ENUM_FRAMEINTERVALS, &it);
 
 		if (!ret) {
 			// TODO: Handle the non-discrete case.
-			double fps = (double)it_interval.discrete.denominator /
-			             it_interval.discrete.numerator;
+			double fps = (double)it.discrete.denominator /
+			             it.discrete.numerator;
 			fpss.push_back(fps);
 		} else if (errno = EINVAL) {
 			break; // Iteration is complete
 		} else {
 			throw "err: unable to detect frame intervals";
 		}
-		++it_interval.index;
+		++it.index;
 	}
+	return fpss;
 }
 
 int main(int argc, char **argv) {
@@ -313,7 +332,6 @@ int main(int argc, char **argv) {
 		std::cout << "Frame Rate is " << camera.GetFPS() << " FPS" << std::endl;
 		camera.SetFPS(10);
 		std::cout << "Frame Rate is " << camera.GetFPS() << " FPS" << std::endl;
-#endif
 
 		std::cout << ">>> SetResolution(640, 480)" << std::endl;
 		camera.SetResolution(640, 480);
@@ -323,6 +341,7 @@ int main(int argc, char **argv) {
 		std::cout << ">>> SetResolution(320, 240)" << std::endl;
 		camera.SetResolution(320, 240);
 		camera.SetFPS(60);
+#endif
 
 	} catch (char const *str) {
 		std::cout << str << std::endl;

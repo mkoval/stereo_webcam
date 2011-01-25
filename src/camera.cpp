@@ -43,7 +43,7 @@ private:
 	};
 
 	int m_fd;
-	int m_nbufs;
+	uint32_t m_nbufs;
 	v4l2_streamparm     m_param;
 	v4l2_format         m_fmt_pix;
 	std::vector<Buffer> m_bufs;
@@ -103,7 +103,7 @@ EyeCam::EyeCam(std::string file) {
 	//
 	m_bufs.resize(req_bufs.count);
 
-	for (int i = 0; i < req_bufs.count; ++i) {
+	for (uint32_t i = 0; i < req_bufs.count; ++i) {
 		struct v4l2_buffer buffer;
 
 		memset(&buffer, 0, sizeof(v4l2_buffer));
@@ -138,7 +138,7 @@ EyeCam::EyeCam(std::string file) {
 		throw "err: unable to enable streaming";
 	}
 
-#if 0
+	#if 0
 	std::list<uint32_t> fmt = GetPixelFormats();
 	std::list<uint32_t>::iterator fmt_it;
 	for (fmt_it = fmt.begin(); fmt_it != fmt.end(); ++fmt_it) {
@@ -158,7 +158,7 @@ EyeCam::EyeCam(std::string file) {
 			}
 		}
 	}
-#endif
+	#endif
 
 	// Fetch default configuration data from the camera.
 	GetParam(m_param);
@@ -166,7 +166,7 @@ EyeCam::EyeCam(std::string file) {
 }
 
 EyeCam::~EyeCam(void) {
-	for (int i = 0; i < m_bufs.size(); ++i) {
+	for (uint32_t i = 0; i < m_bufs.size(); ++i) {
 		munmap(m_bufs[i].ptr, m_bufs[i].len);
 	}
 }
@@ -244,9 +244,14 @@ void EyeCam::GetFormat(v4l2_format &fmt) {
 }
 
 void EyeCam::SetFormat(v4l2_format const &fmt) {
-	int ret = ioctl(m_fd, VIDIOC_S_FMT, &fmt);
-	ret = ioctl(m_fd, VIDIOC_S_FMT, &fmt); // HACK
+	int ret;
 
+	ret = ioctl(m_fd, VIDIOC_S_FMT, &fmt);
+	if (ret == -1) {
+		throw "err: unable to set video format";
+	}
+
+	ret = ioctl(m_fd, VIDIOC_S_FMT, &fmt);
 	if (ret == -1) {
 		throw "err: unable to set video format";
 	}
@@ -293,7 +298,7 @@ std::list<EyeCam::Resolution> EyeCam::GetResolutions(uint32_t pixel_format) cons
 			resolution.width  = it.discrete.width;
 			resolution.height = it.discrete.height;
 			resolutions.push_back(resolution);
-		} else if (errno = EINVAL) {
+		} else if (errno == EINVAL) {
 			break; // Iteration is complete
 		} else {
 			throw "err: unable to detect frame sizes";
@@ -322,7 +327,7 @@ std::list<double> EyeCam::GetFPSs(uint32_t pixel_format, Resolution res) const {
 			double fps = (double)it.discrete.denominator /
 			             it.discrete.numerator;
 			fpss.push_back(fps);
-		} else if (errno = EINVAL) {
+		} else if (errno == EINVAL) {
 			break; // Iteration is complete
 		} else {
 			throw "err: unable to detect frame intervals";

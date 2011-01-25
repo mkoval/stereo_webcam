@@ -1,11 +1,15 @@
 #include <iostream>
 #include <string>
+#include <vector>
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
+#include <string.h>
 
 #include <sys/poll.h>
 #include <sys/types.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 
@@ -14,6 +18,8 @@
 class EyeCam {
 public:
 	EyeCam(std::string file);
+	~EyeCam(void);
+
 	void GetFrame(void);
 	void WaitForFrame(int to_ms) const;
 	void SetResolution(uint32_t width, uint32_t height);
@@ -22,20 +28,32 @@ public:
 	void SetFPS(uint32_t fps);
 
 private:
+	struct Buffer {
+		void  *ptr;
+		size_t len;
+	};
+
 	int m_fd;
-	v4l2_streamparm m_param;
-	v4l2_format     m_fmt_pix;
+	int m_nbufs;
+	v4l2_streamparm     m_param;
+	v4l2_format         m_fmt_pix;
+	std::vector<Buffer> m_bufs;
 
 	void GetParam(v4l2_streamparm &param);
 	void SetParam(v4l2_streamparm const &param);
 
 	void GetFormat(v4l2_format &fmt);
 	void SetFormat(v4l2_format const &fmt);
+
+	void SetStreaming(bool streaming);
 };
 
 EyeCam::EyeCam(std::string file) {
+	int ret;
+
 	// Access mode is O_RDWR instead of as specified in the V4L documentation.
-	m_fd = open(file.c_str(), O_RDWR);
+	m_fd    = open(file.c_str(), O_RDWR);
+	m_nbufs = 2;
 
 	// TODO: Replace the error messages with a custom exception class.
 	if (m_fd == -1) {
@@ -62,8 +80,50 @@ EyeCam::EyeCam(std::string file) {
 	GetParam(m_param);
 	GetFormat(m_fmt_pix);
 
-	// TODO: DEBUG
-	v4l2_fract *fps = &m_param.parm.capture.timeperframe;
+	// Request the appropriate number of buffers or mmap IO.
+	v4l2_requestbuffers req_bufs;
+	req_bufs.count  = m_nbufs;
+	req_bufs.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	req_bufs.memory = V4L2_MEMORY_MMAP;
+	ret = ioctl(m_fd, VIDIOC_REQBUFS, &req_bufs);
+	if (ret == -1 || req_bufs.count < m_nbufs) {
+		throw "err: unable to allocate memory-mapped buffers";
+	}
+
+	//
+	m_bufs.resize(req_bufs.count);
+
+	for (int i = 0; i < req_bufs.count; ++i) {
+		struct v4l2_buffer buffer;
+
+		memset(&buffer, 0, sizeof(v4l2_buffer));
+		buffer.type   = req_bufs.type;
+		buffer.memory = req_bufs.memory;
+		buffer.index  = i;
+
+		ret = ioctl(m_fd, VIDIOC_QUERYBUF, &buffer);
+		if (ret == -1) {
+			throw "err: unable to memory-map buffer";
+		}
+
+		// Save the length for munmap() later.
+		m_bufs[i].ptr = mmap(NULL, buffer.length, PROT_READ | PROT_WRITE,
+		                     MAP_SHARED, m_fd, buffer.m.offset);
+		m_bufs[i].len = buffer.length;
+
+		if (m_bufs[i].ptr == MAP_FAILED) {
+			// XXX: Free memory with munmap() before failing.
+			throw "err: memory map failed";
+		}
+	}
+
+	// TODO: Remember to munmap() in the destructor.
+}
+
+EyeCam::~EyeCam(void) {
+	for (int i = 0; i < m_bufs.size(); ++i) {
+		munmap(m_bufs[i].ptr, m_bufs[i].len);
+	}
 }
 
 void EyeCam::GetFrame(void) {
@@ -82,10 +142,6 @@ double EyeCam::GetFPS(void) const {
 }
 
 void EyeCam::SetResolution(uint32_t width, uint32_t height) {
-	std::cout << "Resolution (before): " << m_fmt_pix.fmt.pix.width  << " x "
-	                                     << m_fmt_pix.fmt.pix.height
-	                                     << std::endl;
-
 	m_fmt_pix.fmt.pix.width  = width;
 	m_fmt_pix.fmt.pix.height = height;
 	SetFormat(m_fmt_pix);
@@ -93,10 +149,6 @@ void EyeCam::SetResolution(uint32_t width, uint32_t height) {
 	if (m_fmt_pix.fmt.pix.width != width || m_fmt_pix.fmt.pix.height != height) {
 		throw "err: unable to set resolution";
 	}
-
-	std::cout << "Resolution (after): "  << m_fmt_pix.fmt.pix.width  << " x "
-	                                     << m_fmt_pix.fmt.pix.height
-	                                     << std::endl;
 }
 
 void EyeCam::WaitForFrame(int to_ms) const {

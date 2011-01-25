@@ -21,6 +21,8 @@ public:
 	EyeCam(std::string file);
 	~EyeCam(void);
 
+	void SetStreaming(bool streaming);
+
 	void GetFrame(void);
 	void WaitForFrame(int to_ms) const;
 
@@ -100,9 +102,8 @@ EyeCam::EyeCam(std::string file) {
 		throw "err: unable to allocate memory-mapped buffers";
 	}
 
-	//
+	// Allocate memmap buffers for recieving the frames.
 	m_bufs.resize(req_bufs.count);
-
 	for (uint32_t i = 0; i < req_bufs.count; ++i) {
 		struct v4l2_buffer buffer;
 
@@ -125,20 +126,9 @@ EyeCam::EyeCam(std::string file) {
 			throw "err: memory map failed";
 		}
 
-		// Begin by enqueing all of the buffers.
-		ret = ioctl(m_fd, VIDIOC_QBUF, &buffer);
-		if (ret == -1) {
-			throw "err: unable to enqueue memory-mapped buffer";
-		}
 	}
 
-	// Enable streaming.
-	ret = ioctl(m_fd, VIDIOC_STREAMON, &req_bufs.type);
-	if (ret == -1) {
-		throw "err: unable to enable streaming";
-	}
 
-#if 0
 	std::list<uint32_t> fmt = GetPixelFormats();
 	std::list<uint32_t>::iterator fmt_it;
 	for (fmt_it = fmt.begin(); fmt_it != fmt.end(); ++fmt_it) {
@@ -158,16 +148,42 @@ EyeCam::EyeCam(std::string file) {
 			}
 		}
 	}
-#endif
 
 	// Fetch default configuration data from the camera.
 	GetParam(m_param);
 	GetFormat(m_fmt_pix);
+	SetStreaming(false);
 }
 
 EyeCam::~EyeCam(void) {
 	for (uint32_t i = 0; i < m_bufs.size(); ++i) {
 		munmap(m_bufs[i].ptr, m_bufs[i].len);
+	}
+}
+
+void SetStreaming(bool streaming) {
+	int ret;
+
+	// Begin by enqueing all of the buffers since they are dequeued when
+	// streaming halts (and by default)
+	if (streaming) {
+		for (size_t i = 0; i < req_bufs.size(); ++i) {
+			ret = ioctl(m_fd, VIDIOC_QBUF, &buffer);
+			if (ret == -1) {
+				throw "err: unable to enqueue memory-mapped buffer";
+			}
+		}
+	}
+
+	// Disabling streaming automatically clears the queue.
+	if (streaming) {
+		ret = ioctl(m_fd, VIDIOC_STREAMON, &req_bufs.type);
+	} else {
+		ret = ioctl(m_fd, VIDIOC_STREAMOFF, &req_bufs.type);
+	}
+
+	if (ret == -1) {
+		throw "err: unable to enable/disable streaming";
 	}
 }
 
@@ -227,7 +243,6 @@ void EyeCam::GetParam(v4l2_streamparm &param) {
 
 void EyeCam::SetParam(v4l2_streamparm const &param) {
 	int ret = ioctl(m_fd, VIDIOC_S_PARM, &param);
-	ret = ioctl(m_fd, VIDIOC_S_PARM, &param); // HACK
 
 	if (ret == -1) {
 		throw "err: unable to set device parameters";

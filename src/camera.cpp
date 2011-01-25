@@ -138,7 +138,7 @@ EyeCam::EyeCam(std::string file) {
 		throw "err: unable to enable streaming";
 	}
 
-	#if 0
+#if 0
 	std::list<uint32_t> fmt = GetPixelFormats();
 	std::list<uint32_t>::iterator fmt_it;
 	for (fmt_it = fmt.begin(); fmt_it != fmt.end(); ++fmt_it) {
@@ -158,7 +158,7 @@ EyeCam::EyeCam(std::string file) {
 			}
 		}
 	}
-	#endif
+#endif
 
 	// Fetch default configuration data from the camera.
 	GetParam(m_param);

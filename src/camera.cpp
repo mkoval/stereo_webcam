@@ -59,8 +59,6 @@ private:
 
 	void GetFormat(v4l2_format &fmt);
 	void SetFormat(v4l2_format const &fmt);
-
-	void SetStreaming(bool streaming);
 };
 
 EyeCam::EyeCam(std::string file) {
@@ -161,13 +159,15 @@ EyeCam::~EyeCam(void) {
 	}
 }
 
-void SetStreaming(bool streaming) {
+void EyeCam::SetStreaming(bool streaming) {
 	int ret;
 
 	// Begin by enqueing all of the buffers since they are dequeued when
 	// streaming halts (and by default)
 	if (streaming) {
-		for (size_t i = 0; i < req_bufs.size(); ++i) {
+		struct v4l2_buffer buffer;
+
+		for (size_t i = 0; i < m_bufs.size(); ++i) {
 			ret = ioctl(m_fd, VIDIOC_QBUF, &buffer);
 			if (ret == -1) {
 				throw "err: unable to enqueue memory-mapped buffer";
@@ -176,10 +176,11 @@ void SetStreaming(bool streaming) {
 	}
 
 	// Disabling streaming automatically clears the queue.
+	uint32_t type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	if (streaming) {
-		ret = ioctl(m_fd, VIDIOC_STREAMON, &req_bufs.type);
+		ret = ioctl(m_fd, VIDIOC_STREAMON, &type);
 	} else {
-		ret = ioctl(m_fd, VIDIOC_STREAMOFF, &req_bufs.type);
+		ret = ioctl(m_fd, VIDIOC_STREAMOFF, &type);
 	}
 
 	if (ret == -1) {

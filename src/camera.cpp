@@ -131,11 +131,14 @@ EyeCam::EyeCam(std::string file) {
 	it_desc.index = 0;
 	it_desc.type  = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
+	uint32_t tmp_pixel;
+
 	for (;;) {
 		ret = ioctl(m_fd, VIDIOC_ENUM_FMT, &it_desc);
 
 		if (!ret) {
 			std::cout << "pix fmt: " << it_desc.description << std::endl;
+			tmp_pixel = it_desc.pixelformat;
 		} else if (errno == EINVAL) {
 			break; // Iteration is complete
 		} else {
@@ -149,7 +152,11 @@ EyeCam::EyeCam(std::string file) {
 	// TODO: For all pixel formats.
 	v4l2_frmsizeenum it_size;
 	it_size.index        = 0;
-	it_size.pixel_format = V4L2_PIX_FMT_YUYV;
+	it_size.pixel_format = tmp_pixel;
+
+	uint32_t tmp_width;
+	uint32_t tmp_height;
+
 	for (;;) {
 		ret = ioctl(m_fd, VIDIOC_ENUM_FRAMESIZES, &it_size);
 
@@ -158,6 +165,9 @@ EyeCam::EyeCam(std::string file) {
 			int width  = it_size.discrete.width;
 			int height = it_size.discrete.height;
 			std::cout << "frame size: " << width << " x " << height << std::endl;
+
+			tmp_width  = width;
+			tmp_height = height;
 		} else if (errno = EINVAL) {
 			break; // Iteration is complete
 		} else {
@@ -171,9 +181,9 @@ EyeCam::EyeCam(std::string file) {
 	// TODO: For all frame sizes and pixel formats.
 	v4l2_frmivalenum it_interval;
 	it_interval.index        = 0;
-	it_interval.pixel_format = V4L2_PIX_FMT_YUYV;
-	it_interval.width        = 640;
-	it_interval.height       = 480;
+	it_interval.pixel_format = tmp_pixel;
+	it_interval.width        = tmp_width;
+	it_interval.height       = tmp_height;
 
 	for (;;) {
 		ret = ioctl(m_fd, VIDIOC_ENUM_FRAMEINTERVALS, &it_interval);

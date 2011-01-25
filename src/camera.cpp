@@ -16,6 +16,8 @@
 
 #include <linux/videodev2.h>
 
+#include <opencv/cv.h>
+
 class EyeCam {
 public:
 	EyeCam(std::string file);
@@ -23,7 +25,7 @@ public:
 
 	void SetStreaming(bool streaming);
 
-	void GetFrame(void);
+	cv::Mat GetFrame(void) const;
 	void WaitForFrame(int to_ms) const;
 
 	uint32_t GetWidth(void) const;
@@ -40,8 +42,9 @@ private:
 	};
 
 	struct Buffer {
-		void  *ptr;
-		size_t len;
+		size_t       len;
+		void        *ptr;
+		v4l2_buffer *buf;
 	};
 
 	int m_fd;
@@ -103,12 +106,12 @@ EyeCam::EyeCam(std::string file) {
 	// Allocate memmap buffers for recieving the frames.
 	m_bufs.resize(req_bufs.count);
 	for (uint32_t i = 0; i < req_bufs.count; ++i) {
-		struct v4l2_buffer buffer;
+		struct v4l2_buffer *buffer = new v4l2_buffer;
 
-		memset(&buffer, 0, sizeof(v4l2_buffer));
-		buffer.type   = req_bufs.type;
-		buffer.memory = req_bufs.memory;
-		buffer.index  = i;
+		memset(buffer, 0, sizeof(v4l2_buffer));
+		buffer->type   = req_bufs.type;
+		buffer->memory = req_bufs.memory;
+		buffer->index  = i;
 
 		ret = ioctl(m_fd, VIDIOC_QUERYBUF, &buffer);
 		if (ret == -1) {
@@ -116,9 +119,11 @@ EyeCam::EyeCam(std::string file) {
 		}
 
 		// Save the length for munmap() later.
-		m_bufs[i].ptr = mmap(NULL, buffer.length, PROT_READ | PROT_WRITE,
-		                     MAP_SHARED, m_fd, buffer.m.offset);
-		m_bufs[i].len = buffer.length;
+		m_bufs[i].ptr = mmap(NULL, buffer->length, PROT_READ | PROT_WRITE,
+		                     MAP_SHARED, m_fd, buffer->m.offset);
+		m_bufs[i].len = buffer->length;
+		m_bufs[i].buf = buffer;
+
 		if (m_bufs[i].ptr == MAP_FAILED) {
 			// XXX: Free memory with munmap() before failing.
 			throw "err: memory map failed";
@@ -188,7 +193,10 @@ void EyeCam::SetStreaming(bool streaming) {
 	}
 }
 
-void EyeCam::GetFrame(void) {
+uint8_t const *EyeCam::GetFrame(void) const {
+	// TODO: Figure out which buffer is most recent.
+
+	cv::Mat frame(GetHeight(), GetWidth(), CV_8UC3, );
 }
 
 void EyeCam::SetFPS(uint32_t fps) {
@@ -362,26 +370,34 @@ int main(int argc, char **argv) {
 
 	try {
 		EyeCam camera(argv[1]);
+		camera.SetFPS(30);
 
+#if 0
 		std::cout << "BEGIN:\n"
 		          << "\tResolution = " << camera.GetWidth()  << " x "
 		                               << camera.GetHeight() <<  "\n"
-		          << "\tFPS        = " << camera.GetFPS()    << std::endl;
+		          << "\tFPS        = " << camera.GetFPS()    <<  "\n"
+		          << std::endl;
 
-		// XXX: SetFPS() test
-		camera.SetFPS(50); // valid: 60, 50, 40, 30, 15 (60 fails...)
-		std::cout << "BEGIN:\n"
-		          << "\tResolution = " << camera.GetWidth()  << " x "
-		                               << camera.GetHeight() <<  "\n"
-		          << "\tFPS        = " << camera.GetFPS()    << std::endl;
-
-		// XXX: SetResolution() test
+		// XXX: SetResolution() test one
+		camera.SetFPS(125);
+		camera.SetFPS(60);
 		camera.SetResolution(320, 240);
-		std::cout << "SET1:\n"
+		std::cout << "SET Resolution(320, 240) FPS(125):\n"
 		          << "\tResolution = " << camera.GetWidth()  << " x "
-		                               << camera.GetHeight() <<  "\n"
-		          << "\tFPS        = " << camera.GetFPS()    << std::endl;
+		                               << camera.GetHeight() << "\n"
+		          << "\tFPS        = " << camera.GetFPS()    << "\n"
+		          << std::endl;
 
+		// XXX: SetResolution() test two
+		camera.SetFPS(60);
+		camera.SetResolution(640, 320);
+		std::cout << "SET Resolution(640, 320) FPS(60):\n"
+		          << "\tResolution = " << camera.GetWidth()  << " x "
+		                               << camera.GetHeight() << "\n"
+		          << "\tFPS        = " << camera.GetFPS()    << "\n"
+		          << std::endl;
+#endif
 	} catch (char const *str) {
 		std::cout << str << std::endl;
 	}

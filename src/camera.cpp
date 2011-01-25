@@ -18,17 +18,22 @@ public:
 	void WaitForFrame(int to_ms) const;
 	void SetResolution(uint32_t width, uint32_t height);
 
+	double GetFPS(void) const;
+	void SetFPS(uint32_t fps);
+
 private:
 	int m_fd;
-	v4l2_format m_fmt_pix;
+	v4l2_streamparm m_param;
+	v4l2_format     m_fmt_pix;
+
+	void GetParam(v4l2_streamparm &param);
+	void SetParam(v4l2_streamparm const &param);
 
 	void GetFormat(v4l2_format &fmt);
 	void SetFormat(v4l2_format const &fmt);
 };
 
 EyeCam::EyeCam(std::string file) {
-	int ret;
-
 	// Access mode is O_RDWR instead of as specified in the V4L documentation.
 	m_fd = open(file.c_str(), O_RDWR);
 
@@ -54,21 +59,26 @@ EyeCam::EyeCam(std::string file) {
 		}
 	}
 
-	// Enumerate all possible standards.
-	struct v4l2_standard fmt_std = { 0 };
-	for (;;) {
-		ret = ioctl(m_fd, VIDIOC_ENUMSTD, &fmt_std);
-		if (ret == -1) {
-			throw "err: unable to query device standards";
-		}
-
-		std::cout << "Standard = " << fmt_std.name << std::endl;
-	}
-
+	GetParam(m_param);
 	GetFormat(m_fmt_pix);
+
+	// TODO: DEBUG
+	v4l2_fract *fps = &m_param.parm.capture.timeperframe;
 }
 
 void EyeCam::GetFrame(void) {
+}
+
+void EyeCam::SetFPS(uint32_t fps) {
+	m_param.parm.capture.timeperframe.numerator   = 1;
+	m_param.parm.capture.timeperframe.denominator = fps;
+	SetParam(m_param);
+}
+
+double EyeCam::GetFPS(void) const {
+	double numer = m_param.parm.capture.timeperframe.numerator;
+	double denom = m_param.parm.capture.timeperframe.denominator;
+	return denom / numer;
 }
 
 void EyeCam::SetResolution(uint32_t width, uint32_t height) {
@@ -94,12 +104,29 @@ void EyeCam::WaitForFrame(int to_ms) const {
 	poll(&fds, 1, to_ms);
 }
 
+void EyeCam::GetParam(v4l2_streamparm &param) {
+	param.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	int ret = ioctl(m_fd, VIDIOC_G_PARM, &param);
+
+	if (ret == -1) {
+		throw "err: unable to get device parameters";
+	}
+}
+
+void EyeCam::SetParam(v4l2_streamparm const &param) {
+	int ret = ioctl(m_fd, VIDIOC_S_PARM, &param);
+
+	if (ret == -1) {
+		throw "err: unable to set device parameters";
+	}
+}
+
 void EyeCam::GetFormat(v4l2_format &fmt) {
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	int ret = ioctl(m_fd, VIDIOC_G_FMT, &fmt);
 
 	if (ret == -1) {
-		throw "err: unable to get device parameters";
+		throw "err: unable to get video format";
 	}
 }
 
@@ -107,7 +134,7 @@ void EyeCam::SetFormat(v4l2_format const &fmt) {
 	int ret = ioctl(m_fd, VIDIOC_S_FMT, &fmt);
 
 	if (ret == -1) {
-		throw "err: unable to set device parameters";
+		throw "err: unable to set video format";
 	}
 }
 
@@ -120,6 +147,10 @@ int main(int argc, char **argv) {
 
 	try {
 		EyeCam camera(argv[1]);
+
+		std::cout << "Frame Rate is " << camera.GetFPS() << " FPS" << std::endl;
+		camera.SetFPS(60);
+		std::cout << "Frame Rate is " << camera.GetFPS() << " FPS" << std::endl;
 
 		std::cout << ">>> SetResolution(320, 240)" << std::endl;
 		camera.SetResolution(320, 240);

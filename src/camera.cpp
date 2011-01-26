@@ -17,6 +17,7 @@
 #include <linux/videodev2.h>
 
 #include <opencv/cv.h>
+#include <opencv/highgui.h>
 
 class EyeCam {
 public:
@@ -25,7 +26,7 @@ public:
 
 	void SetStreaming(bool streaming);
 
-	cv::Mat GetFrame(void) const;
+	void GetFrame(cv::Mat &dst);
 	void WaitForFrame(int to_ms) const;
 
 	uint32_t GetWidth(void) const;
@@ -131,7 +132,6 @@ EyeCam::EyeCam(std::string file) {
 
 	}
 
-
 	std::list<uint32_t> fmt = GetPixelFormats();
 	std::list<uint32_t>::iterator fmt_it;
 	for (fmt_it = fmt.begin(); fmt_it != fmt.end(); ++fmt_it) {
@@ -193,10 +193,32 @@ void EyeCam::SetStreaming(bool streaming) {
 	}
 }
 
-uint8_t const *EyeCam::GetFrame(void) const {
-	// TODO: Figure out which buffer is most recent.
+void EyeCam::GetFrame(cv::Mat &dst) {
+	int ret;
 
-	cv::Mat frame(GetHeight(), GetWidth(), CV_8UC3, );
+	// Grab the most recent buffered frame; blocking.
+	v4l2_buffer buf;
+	buf.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	buf.memory = V4L2_MEMORY_MMAP;
+
+	ret = ioctl(m_fd, VIDIOC_DQBUF, &buf);
+	if (ret == -1) {
+		throw "err: unable to dequeue buffer";
+	}
+
+	// Convert the data to RGB using OpenCV.
+	size_t index  = buf.index;
+	size_t rowlen = m_fmt_pix.fmt.pix.bytesperline;
+	void  *data   = m_bufs[index].ptr;
+
+	cv::Mat frame(GetHeight(), GetWidth(), CV_8UC3, data, rowlen);
+	cv::cvtColor(frame, dst, CV_YCrCb2RGB);
+
+	// Add the buffer back to the queue for reuse.
+	ret = ioctl(m_fd, VIDIOC_QBUF, &buf);
+	if (ret == -1) {
+		throw "err: unable to enqueue used buffer";
+	}
 }
 
 void EyeCam::SetFPS(uint32_t fps) {
@@ -371,6 +393,14 @@ int main(int argc, char **argv) {
 	try {
 		EyeCam camera(argv[1]);
 		camera.SetFPS(30);
+
+		// Stream video.
+		cv::Mat frame;
+		for (;;) {
+			camera.WaitForFrame(100);
+			camera.GetFrame(frame);
+			cv::imshow("Streaming Video", frame);
+		}
 
 #if 0
 		std::cout << "BEGIN:\n"

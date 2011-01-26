@@ -1,0 +1,10 @@
+<package>
+	<description>
+		Hardware and software synchronized cameras using physically modified
+		PS3 EyeToy cameras.
+	</description>
+	<author>Michael Koval/koval.michael@gmail.com</author>
+	<license>BSD</license>
+	<review status="unreviewed" notes=""/>
+	<depend package="opencv2"/>
+</package>

@@ -28,19 +28,20 @@ static int clamp (double x)
 	else               return r;
 }
 
+
+#define C_ADJ (255 / 122.0)
+#define Y_ADJ(y1) ((255 / 219.0) * (y1 - 16))
 static void yuv444_to_rgb(uint8_t Y1, uint8_t Cb, uint8_t Cr, uint8_t *dst)
 {
 	double r, g, b;         /* temporaries */
 	double y1, pb, pr;
 
+	pb = (Cb - 128);
+	pr = (Cr - 128);
 
-	y1 = (255 / 219.0) * (Y1 - 16);
-	pb = (255 / 224.0) * (Cb - 128);
-	pr = (255 / 224.0) * (Cr - 128);
-
-	r = 1.0 * y1 + 0     * pb + 1.402 * pr;
-	g = 1.0 * y1 - 0.344 * pb - 0.714 * pr;
-	b = 1.0 * y1 + 1.772 * pb + 0     * pr;
+	r = Y_ADJ(Y1) +              255/112.0 * 0.701 * pr;
+	g = Y_ADJ(Y1) - 255/112.0 * 0.886 * 0.114/0.587 * pb - 255/112.0*0.701 * 0.299/0.587 * pr;
+	b = Y_ADJ(Y1) + 255/112.0 * 0.886 * pb;
 
 	dst[0] = clamp (r * 255); /* [ok? one should prob. limit y1,pb,pr] */
 	dst[1] = clamp (g * 255);

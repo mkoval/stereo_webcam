@@ -43,9 +43,9 @@ static void yuv444_to_rgb(uint8_t Y1, uint8_t Cb, uint8_t Cr, uint8_t *dst)
 	g = Y_ADJ(Y1) - 255/112.0 * 0.886 * 0.114/0.587 * pb - 255/112.0*0.701 * 0.299/0.587 * pr;
 	b = Y_ADJ(Y1) + 255/112.0 * 0.886 * pb;
 
-	dst[0] = clamp (r * 255); /* [ok? one should prob. limit y1,pb,pr] */
-	dst[1] = clamp (g * 255);
-	dst[2] = clamp (b * 255);
+	dst[2] = clamp (r ); /* [ok? one should prob. limit y1,pb,pr] */
+	dst[1] = clamp (g );
+	dst[0] = clamp (b );
 
 }
 

@@ -481,25 +481,51 @@ int main(int argc, char **argv) {
 	// OpenCV sets errno to "no such file or directory."
 	errno = 0;
 
-	if (argc <= 1) {
+	if (argc <= 3) {
 		std::cerr << "err: incorrect number of arguments\n"
-		          << "usage: ./stereo_webcam <device>" << std::endl;
+		          << "usage: ./stereo_webcam <device 1> <device 2> <prefix>" << std::endl;
 		return 1;
 	}
 
+	int i = 0;
+
 	try {
-		EyeCam camera(argv[1]);
-		camera.SetStreaming(true);
+		EyeCam cam1(argv[1]);
+		EyeCam cam2(argv[2]);
+		cam1.SetStreaming(true);
+		cam2.SetStreaming(true);
 
 		// Stream video.
 		cv::Mat frame;
 		for (;;) {
-			camera.WaitForFrame(100);
-			Image  &frame = camera.GetFrame();
-			size_t  num   = frame.height * frame.width;
-			cv::Mat img(frame.height, frame.width, CV_8UC3, frame.data, 0);
-			cv::imshow("Streaming Video", img);
+			cam1.WaitForFrame(100);
+			cam2.WaitForFrame(100);
+
+			Image  &frame1 = cam1.GetFrame();
+			Image  &frame2 = cam2.GetFrame();
+
+			cv::Mat img1(frame1.height, frame1.width, CV_8UC3, frame1.data, 0);
+			cv::Mat img2(frame2.height, frame2.width, CV_8UC3, frame2.data, 0);
+			cv::Mat img(frame1.height, frame1.width + frame2.width, CV_8UC3);
+
+			cv::Mat img_left  = img(cv::Range(0, frame1.height), cv::Range(0, frame1.width));
+			cv::Mat img_right = img(cv::Range(0, frame1.height), cv::Range(frame1.width,  2 * frame1.width));
+
+			img1.copyTo(img_left);
+			img2.copyTo(img_right);
+
+			std::stringstream ss;
+			ss << argv[3] << i << ".png";
+
+			cv::imshow("SyncTest", img);
+			cv::imwrite(ss.str(), img);
 			cv::waitKey(10);
+
+			delete &frame1;
+			delete &frame2;
+
+			if (i >= 100) break;
+			i++;
 		}
 
 #if 0

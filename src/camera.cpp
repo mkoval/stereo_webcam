@@ -19,6 +19,36 @@
 #include <opencv/cv.h>
 #include <opencv/highgui.h>
 
+static int clamp (double x)
+{
+	int r = x;      /* round to nearest */
+
+	if (r < 0)         return 0;
+	else if (r > 255)  return 255;
+	else               return r;
+}
+
+static void yuv444_to_rgb(uint8_t Y1, uint8_t Cb, uint8_t Cr, uint8_t *dst)
+{
+	double r, g, b;         /* temporaries */
+	double y1, pb, pr;
+
+
+	y1 = (255 / 219.0) * (Y1 - 16);
+	pb = (255 / 224.0) * (Cb - 128);
+	pr = (255 / 224.0) * (Cr - 128);
+
+	r = 1.0 * y1 + 0     * pb + 1.402 * pr;
+	g = 1.0 * y1 - 0.344 * pb - 0.714 * pr;
+	b = 1.0 * y1 + 1.772 * pb + 0     * pr;
+
+	dst[0] = clamp (r * 255); /* [ok? one should prob. limit y1,pb,pr] */
+	dst[1] = clamp (g * 255);
+	dst[2] = clamp (b * 255);
+
+}
+
+/* consume 6 bytes of dst and 4 bytes of src */
 static void yuv422_to_rgb(uint8_t const *src, uint8_t *dst)
 {
 	int8_t y1 = src[0];
@@ -26,6 +56,10 @@ static void yuv422_to_rgb(uint8_t const *src, uint8_t *dst)
 	int8_t y2 = src[2];
 	int8_t cr = src[3];
 
+
+	yuv444_to_rgb(y1, cb, cr, dst);
+	yuv444_to_rgb(y2, cb, cr, dst + 3);
+#if 0
 	double r1 = (298.082 * y1                + 408.583 * cr) / 256 - 222.921;
 	double g1 = (298.082 * y1 + 100.291 * cb - 208.120 * cr) / 256 + 135.576;
 	double b1 = (298.082 * y1 + 516.412 * cb               ) / 256 - 276.836;
@@ -40,7 +74,10 @@ static void yuv422_to_rgb(uint8_t const *src, uint8_t *dst)
 	dst[3] = b2;
 	dst[4] = g2;
 	dst[5] = r2;
+#endif
 }
+
+
 
 class Image {
 public:

@@ -19,6 +19,54 @@
 #include <opencv/cv.h>
 #include <opencv/highgui.h>
 
+static void yuv422_to_rgb(uint8_t const *src, uint8_t *dst)
+{
+	int8_t y1 = src[0];
+	int8_t cb = src[1];
+	int8_t y2 = src[2];
+	int8_t cr = src[3];
+
+	double r1 = (298.082 * y1                + 408.583 * cr) / 256 - 222.921;
+	double g1 = (298.082 * y1 + 100.291 * cb - 208.120 * cr) / 256 + 135.576;
+	double b1 = (298.082 * y1 + 516.412 * cb               ) / 256 - 276.836;
+
+	double r2 = (298.082 * y1                + 408.583 * cr) / 256 - 222.921;
+	double g2 = (298.082 * y1 + 100.291 * cb - 208.120 * cr) / 256 + 135.576;
+	double b2 = (298.082 * y1 + 516.412 * cb               ) / 256 - 276.836;
+
+	dst[0] = b1;
+	dst[1] = g1;
+	dst[2] = r1;
+	dst[3] = b2;
+	dst[4] = g2;
+	dst[5] = r2;
+}
+
+class Image {
+public:
+	Image(uint32_t w, uint32_t h);
+	~Image(void);
+
+	uint32_t const width;
+	uint32_t const height;
+	uint8_t *const data;
+
+private:
+	Image(Image const&);
+};
+
+Image::Image(uint32_t w, uint32_t h)
+	: width(w), height(h), data(new uint8_t[w * h * 3]) {
+}
+
+Image::Image(Image const &img)
+	: width(0), height(0), data(NULL) {
+}
+
+Image::~Image(void) {
+	delete[] data;
+}
+
 class EyeCam {
 public:
 	EyeCam(std::string file);
@@ -26,7 +74,7 @@ public:
 
 	void SetStreaming(bool streaming);
 
-	void GetFrame(cv::Mat &dst);
+	Image &GetFrame(void);
 	void WaitForFrame(int to_ms) const;
 
 	uint32_t GetWidth(void) const;
@@ -114,7 +162,7 @@ EyeCam::EyeCam(std::string file) {
 		buffer->memory = req_bufs.memory;
 		buffer->index  = i;
 
-		ret = ioctl(m_fd, VIDIOC_QUERYBUF, &buffer);
+		ret = ioctl(m_fd, VIDIOC_QUERYBUF, buffer);
 		if (ret == -1) {
 			throw "err: unable to memory-map buffer";
 		}
@@ -132,6 +180,7 @@ EyeCam::EyeCam(std::string file) {
 
 	}
 
+#if 0
 	std::list<uint32_t> fmt = GetPixelFormats();
 	std::list<uint32_t>::iterator fmt_it;
 	for (fmt_it = fmt.begin(); fmt_it != fmt.end(); ++fmt_it) {
@@ -151,11 +200,11 @@ EyeCam::EyeCam(std::string file) {
 			}
 		}
 	}
+#endif
 
 	// Fetch default configuration data from the camera.
 	GetParam(m_param);
 	GetFormat(m_fmt_pix);
-	SetStreaming(false);
 }
 
 EyeCam::~EyeCam(void) {
@@ -170,10 +219,8 @@ void EyeCam::SetStreaming(bool streaming) {
 	// Begin by enqueing all of the buffers since they are dequeued when
 	// streaming halts (and by default)
 	if (streaming) {
-		struct v4l2_buffer buffer;
-
 		for (size_t i = 0; i < m_bufs.size(); ++i) {
-			ret = ioctl(m_fd, VIDIOC_QBUF, &buffer);
+			ret = ioctl(m_fd, VIDIOC_QBUF, m_bufs[i].buf);
 			if (ret == -1) {
 				throw "err: unable to enqueue memory-mapped buffer";
 			}
@@ -187,17 +234,19 @@ void EyeCam::SetStreaming(bool streaming) {
 	} else {
 		ret = ioctl(m_fd, VIDIOC_STREAMOFF, &type);
 	}
+	std::cout << "errno = " << strerror(errno) << std::endl;
 
 	if (ret == -1) {
 		throw "err: unable to enable/disable streaming";
 	}
 }
 
-void EyeCam::GetFrame(cv::Mat &dst) {
+Image &EyeCam::GetFrame(void) {
 	int ret;
 
 	// Grab the most recent buffered frame; blocking.
 	v4l2_buffer buf;
+
 	buf.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	buf.memory = V4L2_MEMORY_MMAP;
 
@@ -206,19 +255,26 @@ void EyeCam::GetFrame(cv::Mat &dst) {
 		throw "err: unable to dequeue buffer";
 	}
 
-	// Convert the data to RGB using OpenCV.
-	size_t index  = buf.index;
-	size_t rowlen = m_fmt_pix.fmt.pix.bytesperline;
-	void  *data   = m_bufs[index].ptr;
+	// Convert the Y'UV 4:2;2 image to RGB.
+	// TODO: Detect the image's format dynamically.
+	uint32_t width  = GetWidth();
+	uint32_t height = GetHeight();
+	uint32_t bpl    = m_fmt_pix.fmt.pix.bytesperline;
+	Image *frame = new Image(width, height);
 
-	cv::Mat frame(GetHeight(), GetWidth(), CV_8UC3, data, rowlen);
-	cv::cvtColor(frame, dst, CV_YCrCb2RGB);
+	for (size_t y = 0; y < height; y += 1)
+	for (size_t x = 0; x < width;  x += 2) {
+		uint8_t *src = (uint8_t *)(m_bufs[buf.index].ptr) + (y * bpl) + (x * 2);
+		uint8_t *dst = (uint8_t *)frame->data + (y * width * 3) + (x * 3);
+		yuv422_to_rgb(src, dst);
+	}
 
 	// Add the buffer back to the queue for reuse.
 	ret = ioctl(m_fd, VIDIOC_QBUF, &buf);
 	if (ret == -1) {
 		throw "err: unable to enqueue used buffer";
 	}
+	return *frame;
 }
 
 void EyeCam::SetFPS(uint32_t fps) {
@@ -384,6 +440,9 @@ std::list<double> EyeCam::GetFPSs(uint32_t pixel_format, Resolution res) const {
 }
 
 int main(int argc, char **argv) {
+	// OpenCV sets errno to "no such file or directory."
+	errno = 0;
+
 	if (argc <= 1) {
 		std::cerr << "err: incorrect number of arguments\n"
 		          << "usage: ./stereo_webcam <device>" << std::endl;
@@ -392,14 +451,17 @@ int main(int argc, char **argv) {
 
 	try {
 		EyeCam camera(argv[1]);
-		camera.SetFPS(30);
+		camera.SetStreaming(true);
 
 		// Stream video.
 		cv::Mat frame;
 		for (;;) {
 			camera.WaitForFrame(100);
-			camera.GetFrame(frame);
-			cv::imshow("Streaming Video", frame);
+			Image  &frame = camera.GetFrame();
+			size_t  num   = frame.height * frame.width;
+			cv::Mat img(frame.height, frame.width, CV_8UC3, frame.data, 0);
+			cv::imshow("Streaming Video", img);
+			cv::waitKey(10);
 		}
 
 #if 0

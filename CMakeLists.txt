@@ -17,4 +17,4 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 #rosbuild_genmsg()
 #rosbuild_gensrv()
 
-rosbuild_add_executable(camtest src/camera.cpp)
+rosbuild_add_executable(camtest src/camera.cpp src/CameraFrame.cpp)

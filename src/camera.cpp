@@ -81,6 +81,7 @@ static void yuv422_to_rgb(uint8_t const *src, uint8_t *dst)
 }
 
 class CameraFrame {
+public:
 	CameraFrame(void);
 	CameraFrame(CameraFrame const &src);
 	~CameraFrame(void);
@@ -90,16 +91,16 @@ class CameraFrame {
 	bool IsValid(void) const;
 	uint32_t GetWidth(void) const;
 	uint32_t GetHeight(void) const;
-	uint8_t const *GetDataBGR(void) const;
 	timeval GetTimestamp(void) const;
 
-	void Update(uint8_t const *data, uint32_t width, uint32_t height,
-	            uint32_t rowlen, timeval time);
+	uint8_t       *GetDataBGR(void);
+	uint8_t const *GetDataBGR(void) const;
+
+	void Update(uint32_t width, uint32_t height, timeval time);
 
 private:
 	uint32_t m_width;
 	uint32_t m_height;
-	uint32_t m_rowlen;
 	size_t   m_length;
 	uint8_t *m_data;
 	timeval  m_time;
@@ -110,7 +111,6 @@ private:
 CameraFrame::CameraFrame(void)
 	: m_width(0),
 	  m_height(0),
-	  m_rowlen(0),
 	  m_length(0),
 	  m_data(NULL)
 {
@@ -121,11 +121,11 @@ CameraFrame::CameraFrame(void)
 CameraFrame::CameraFrame(CameraFrame const &src)
 	: m_width(src.m_width),
 	  m_height(src.m_height),
-	  m_rowlen(src.m_rowlen),
-	  m_length(m_rowlen * m_height * 3),
-	  m_data(new uint8_t[m_length])
+	  m_length(m_width * m_height * 3),
+	  m_data(new uint8_t[m_length]),
+	  m_time(src.m_time)
 {
-	memcpy(m_data, src.m_data, m_rowlen * m_height);
+	memcpy(m_data, src.m_data, m_width * m_height);
 }
 
 CameraFrame::~CameraFrame(void)
@@ -135,9 +135,10 @@ CameraFrame::~CameraFrame(void)
 
 CameraFrame &CameraFrame::operator=(CameraFrame const &src)
 {
-	Resize(src.m_width, src.m_height, src.m_rowlen);
-	memcpy(m_data, src.m_data, src.m_rowlen * src.m_height * 3);
+	Resize(src.m_width, src.m_height);
+	memcpy(m_data, src.m_data, src.m_width * src.m_height * 3);
 	m_time = src.m_time;
+	return *this;
 }
 
 bool CameraFrame::IsValid(void) const
@@ -155,7 +156,12 @@ uint32_t CameraFrame::GetHeight(void) const
 	return m_height;
 }
 
-uint8_t const *CameraFrame::GetDataRGB(void) const
+uint8_t *CameraFrame::GetDataBGR(void)
+{
+	return m_data;
+}
+
+uint8_t const *CameraFrame::GetDataBGR(void) const
 {
 	return m_data;
 }
@@ -165,26 +171,22 @@ timeval CameraFrame::GetTimestamp(void) const
 	return m_time;
 }
 
-void CameraFrame::Update(uint8_t const *data, uint32_t width, uint32_t height,
-                         uint32_t rowlen, timeval time)
+void CameraFrame::Update(uint32_t width, uint32_t height, timeval time)
 {
-	Resize(width, height, rowlen);
-	memcpy(m_data, data, rowlen * height * 3);
+	Resize(width, height);
 	m_time = time;
 }
 
-
-void CameraFrame::Resize(uint32_t width, uint32_t height, uint32_t rowlen)
+void CameraFrame::Resize(uint32_t width, uint32_t height)
 {
-	if (rowlen * height * 3 > m_length) {
+	if (width * height * 3 > m_length) {
 		delete[] m_data;
-		m_length = rowlen * height * 3;
+		m_length = width * height * 3;
 		m_data   = new uint8_t[m_length];
 	}
 
 	m_width  = width;
 	m_height = height;
-	m_rowlen = rowlen;
 }
 
 class EyeCam {
@@ -194,7 +196,7 @@ public:
 
 	void SetStreaming(bool streaming);
 
-	Image &GetFrame(void);
+	CameraFrame &GetFrame(CameraFrame &);
 	void WaitForFrame(int to_ms) const;
 
 	uint32_t GetWidth(void) const;
@@ -361,7 +363,7 @@ void EyeCam::SetStreaming(bool streaming) {
 	}
 }
 
-Image &EyeCam::GetFrame(void) {
+CameraFrame &EyeCam::GetFrame(CameraFrame &frame) {
 	int ret;
 
 	// Grab the most recent buffered frame; blocking.
@@ -380,12 +382,14 @@ Image &EyeCam::GetFrame(void) {
 	uint32_t width  = GetWidth();
 	uint32_t height = GetHeight();
 	uint32_t bpl    = m_fmt_pix.fmt.pix.bytesperline;
-	Image *frame = new Image(width, height, buf.timestamp);
+
+	frame.Update(width, height, buf.timestamp);
+	uint8_t *dst_data = frame.GetDataBGR();
 
 	for (size_t y = 0; y < height; y += 1)
 	for (size_t x = 0; x < width;  x += 2) {
 		uint8_t *src = (uint8_t *)(m_bufs[buf.index].ptr) + (y * bpl) + (x * 2);
-		uint8_t *dst = (uint8_t *)frame->data + (y * width * 3) + (x * 3);
+		uint8_t *dst = (uint8_t *)dst_data + (y * width * 3) + (x * 3);
 		yuv422_to_rgb(src, dst);
 	}
 
@@ -394,7 +398,7 @@ Image &EyeCam::GetFrame(void) {
 	if (ret == -1) {
 		throw "err: unable to enqueue used buffer";
 	}
-	return *frame;
+	return frame;
 }
 
 void EyeCam::SetFPS(uint32_t fps) {
@@ -569,13 +573,14 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
-	int i = 0;
-
 	try {
 		EyeCam cam1(argv[1]);
 		EyeCam cam2(argv[2]);
 		cam1.SetStreaming(true);
 		cam2.SetStreaming(true);
+
+		CameraFrame frame1;
+		CameraFrame frame2;
 
 		// Stream video.
 		cv::Mat frame;
@@ -583,40 +588,29 @@ int main(int argc, char **argv) {
 			cam1.WaitForFrame(100);
 			cam2.WaitForFrame(100);
 
-			Image  &frame1 = cam1.GetFrame();
-			Image  &frame2 = cam2.GetFrame();
+			cam1.GetFrame(frame1);
+			cam2.GetFrame(frame2);
 
-			cv::Mat img1(frame1.height, frame1.width, CV_8UC3, frame1.data, 0);
-			cv::Mat img2(frame2.height, frame2.width, CV_8UC3, frame2.data, 0);
-			cv::Mat img(frame1.height, frame1.width + frame2.width, CV_8UC3);
+			uint32_t width  = frame1.GetWidth();
+			uint32_t height = frame1.GetHeight();
 
-			cv::Mat img_left  = img(cv::Range(0, frame1.height), cv::Range(0, frame1.width));
-			cv::Mat img_right = img(cv::Range(0, frame1.height), cv::Range(frame1.width,  2 * frame1.width));
+			cv::Mat img1(height, width, CV_8UC3, frame1.GetDataBGR(), 0);
+			cv::Mat img2(height, width, CV_8UC3, frame2.GetDataBGR(), 0);
+			cv::Mat img(height, 2 * width, CV_8UC3);
+
+			cv::Mat img_left  = img(cv::Range(0, height), cv::Range(0,      width));
+			cv::Mat img_right = img(cv::Range(0, height), cv::Range(width,  width * 2));
 			img1.copyTo(img_left);
 			img2.copyTo(img_right);
 
-			// Synchronization difference
-			timeval diff;
-			timersub(&frame1.time, &frame2.time, &diff);
-
-			std::stringstream ss1;
-			ss1 << std::showpos << diff.tv_sec << '.'
-			    << std::noshowpos << std::setfill('0') << std::setw(6) << diff.tv_usec;
-			cv::putText(img, ss1.str(), cv::Point(0, frame1.height - 20), cv::FONT_HERSHEY_TRIPLEX,
-			            1.0, cv::Scalar(100, 255, 0));
-
+#if 0
 			std::stringstream ss2;
 			ss2 << argv[3] << i << ".png";
+			cv::imwrite(ss2.str(), img);
+#endif
 
 			cv::imshow("SyncTest", img);
-			cv::imwrite(ss2.str(), img);
 			cv::waitKey(10);
-
-			delete &frame1;
-			delete &frame2;
-
-			if (i >= 100) break;
-			i++;
 		}
 
 #if 0

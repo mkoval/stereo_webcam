@@ -1,3 +1,4 @@
+#include <iomanip>
 #include <iostream>
 #include <list>
 #include <string>
@@ -13,6 +14,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
+#include <sys/time.h>
 
 #include <linux/videodev2.h>
 
@@ -82,23 +84,24 @@ static void yuv422_to_rgb(uint8_t const *src, uint8_t *dst)
 
 class Image {
 public:
-	Image(uint32_t w, uint32_t h);
+	Image(uint32_t w, uint32_t h, timeval ts);
 	~Image(void);
 
 	uint32_t const width;
 	uint32_t const height;
 	uint8_t *const data;
+	timeval  const time;
 
 private:
 	Image(Image const&);
 };
 
-Image::Image(uint32_t w, uint32_t h)
-	: width(w), height(h), data(new uint8_t[w * h * 3]) {
+Image::Image(uint32_t w, uint32_t h, timeval ts)
+	: width(w), height(h), data(new uint8_t[w * h * 3]), time(ts) {
 }
 
 Image::Image(Image const &img)
-	: width(0), height(0), data(NULL) {
+	: width(0), height(0), data(NULL), time() {
 }
 
 Image::~Image(void) {
@@ -298,7 +301,7 @@ Image &EyeCam::GetFrame(void) {
 	uint32_t width  = GetWidth();
 	uint32_t height = GetHeight();
 	uint32_t bpl    = m_fmt_pix.fmt.pix.bytesperline;
-	Image *frame = new Image(width, height);
+	Image *frame = new Image(width, height, buf.timestamp);
 
 	for (size_t y = 0; y < height; y += 1)
 	for (size_t x = 0; x < width;  x += 2) {
@@ -510,15 +513,24 @@ int main(int argc, char **argv) {
 
 			cv::Mat img_left  = img(cv::Range(0, frame1.height), cv::Range(0, frame1.width));
 			cv::Mat img_right = img(cv::Range(0, frame1.height), cv::Range(frame1.width,  2 * frame1.width));
-
 			img1.copyTo(img_left);
 			img2.copyTo(img_right);
 
-			std::stringstream ss;
-			ss << argv[3] << i << ".png";
+			// Synchronization difference
+			timeval diff;
+			timersub(&frame1.time, &frame2.time, &diff);
+
+			std::stringstream ss1;
+			ss1 << std::showpos << diff.tv_sec << '.'
+			    << std::noshowpos << std::setfill('0') << std::setw(6) << diff.tv_usec;
+			cv::putText(img, ss1.str(), cv::Point(0, frame1.height - 20), cv::FONT_HERSHEY_TRIPLEX,
+			            1.0, cv::Scalar(100, 255, 0));
+
+			std::stringstream ss2;
+			ss2 << argv[3] << i << ".png";
 
 			cv::imshow("SyncTest", img);
-			cv::imwrite(ss.str(), img);
+			cv::imwrite(ss2.str(), img);
 			cv::waitKey(10);
 
 			delete &frame1;

@@ -80,33 +80,87 @@ static void yuv422_to_rgb(uint8_t const *src, uint8_t *dst)
 #endif
 }
 
+class CameraFrame {
+	CameraFrame(void);
+	CameraFrame(CameraFrame const &src);
+	~CameraFrame(void);
 
+	CameraFrame &operator=(CameraFrame const &src);
 
-class Image {
-public:
-	Image(uint32_t w, uint32_t h, timeval ts);
-	~Image(void);
+	bool IsValid(void) const;
+	uint32_t GetWidth(void) const;
+	uint32_t GetHeight(void) const;
+	uint8_t const *GetDataBGR(void) const;
+	timeval GetTimestamp(void) const;
 
-	uint32_t const width;
-	uint32_t const height;
-	uint8_t *const data;
-	timeval  const time;
+	bool Resize(uint32_t width, uint32_t height);
 
 private:
-	Image(Image const&);
+	uint32_t m_width;
+	uint32_t m_height;
+	size_t   m_length;
+	uint8_t *m_data;
+	timeval  m_time;
 };
 
-Image::Image(uint32_t w, uint32_t h, timeval ts)
-	: width(w), height(h), data(new uint8_t[w * h * 3]), time(ts) {
+CameraFrame::CameraFrame(void)
+	: m_width(0),
+	  m_height(0),
+	  m_length(0),
+	  m_data(NULL)
+{
+	m_time.tv_sec  = 0;
+	m_time.tv_usec = 0;
 }
 
-Image::Image(Image const &img)
-	: width(0), height(0), data(NULL), time() {
+CameraFrame::CameraFrame(CameraFrame const &src)
+	: m_width(src.m_width),
+	  m_height(src.m_height),
+	  m_length(m_width * m_height),
+	  m_data(new uint8_t[m_length])
+{
+	memcpy(m_data, src.m_data, m_width * m_height);
 }
 
-Image::~Image(void) {
-	delete[] data;
+CameraFrame::~CameraFrame(void)
+{
+	delete[] m_data;
 }
+
+CameraFrame &CameraFrame::operator=(CameraFrame const &src)
+{
+	Resize(src.m_width, src.m_height);
+
+	m_width  = src.m_width;
+	m_height = src.m_height;
+	memcpy(m_data, src.m_data, src.m_width * src.m_height);
+}
+
+bool CameraFrame::IsValid(void) const
+{
+	return m_data != NULL;
+}
+
+uint32_t CameraFrame::GetWidth(void) const
+{
+	return m_width;
+}
+
+uint32_t CameraFrame::GetHeight(void) const
+{
+	return m_height;
+}
+
+uint8_t const *CameraFrame::GetDataRGB(void) const
+{
+	return m_data;
+}
+
+timeval CameraFrame::GetTimestamp(void) const
+{
+	return m_time;
+}
+
 
 class EyeCam {
 public:

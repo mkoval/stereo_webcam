@@ -93,19 +93,24 @@ class CameraFrame {
 	uint8_t const *GetDataBGR(void) const;
 	timeval GetTimestamp(void) const;
 
-	bool Resize(uint32_t width, uint32_t height);
+	void Update(uint8_t const *data, uint32_t width, uint32_t height,
+	            uint32_t rowlen, timeval time);
 
 private:
 	uint32_t m_width;
 	uint32_t m_height;
+	uint32_t m_rowlen;
 	size_t   m_length;
 	uint8_t *m_data;
 	timeval  m_time;
+
+	void Resize(uint32_t width, uint32_t height);
 };
 
 CameraFrame::CameraFrame(void)
 	: m_width(0),
 	  m_height(0),
+	  m_rowlen(0),
 	  m_length(0),
 	  m_data(NULL)
 {
@@ -116,10 +121,11 @@ CameraFrame::CameraFrame(void)
 CameraFrame::CameraFrame(CameraFrame const &src)
 	: m_width(src.m_width),
 	  m_height(src.m_height),
-	  m_length(m_width * m_height),
+	  m_rowlen(src.m_rowlen),
+	  m_length(m_rowlen * m_height * 3),
 	  m_data(new uint8_t[m_length])
 {
-	memcpy(m_data, src.m_data, m_width * m_height);
+	memcpy(m_data, src.m_data, m_rowlen * m_height);
 }
 
 CameraFrame::~CameraFrame(void)
@@ -129,11 +135,9 @@ CameraFrame::~CameraFrame(void)
 
 CameraFrame &CameraFrame::operator=(CameraFrame const &src)
 {
-	Resize(src.m_width, src.m_height);
-
-	m_width  = src.m_width;
-	m_height = src.m_height;
-	memcpy(m_data, src.m_data, src.m_width * src.m_height);
+	Resize(src.m_width, src.m_height, src.m_rowlen);
+	memcpy(m_data, src.m_data, src.m_rowlen * src.m_height * 3);
+	m_time = src.m_time;
 }
 
 bool CameraFrame::IsValid(void) const
@@ -161,6 +165,27 @@ timeval CameraFrame::GetTimestamp(void) const
 	return m_time;
 }
 
+void CameraFrame::Update(uint8_t const *data, uint32_t width, uint32_t height,
+                         uint32_t rowlen, timeval time)
+{
+	Resize(width, height, rowlen);
+	memcpy(m_data, data, rowlen * height * 3);
+	m_time = time;
+}
+
+
+void CameraFrame::Resize(uint32_t width, uint32_t height, uint32_t rowlen)
+{
+	if (rowlen * height * 3 > m_length) {
+		delete[] m_data;
+		m_length = rowlen * height * 3;
+		m_data   = new uint8_t[m_length];
+	}
+
+	m_width  = width;
+	m_height = height;
+	m_rowlen = rowlen;
+}
 
 class EyeCam {
 public:

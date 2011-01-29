@@ -102,6 +102,16 @@ Webcam::Webcam(std::string file, size_t nbufs)
 	GetFormat(m_fmt_pix);
 }
 
+Webcam::Webcam(Webcam const &src)
+{
+	throw std::runtime_error("copying is disabled");
+}
+
+Webcam &Webcam::operator=(Webcam const &src)
+{
+	throw std::runtime_error("assignment is disabled");
+}
+
 Webcam::~Webcam(void) {
 	for (size_t i = 0; i < m_bufs.size(); ++i) {
 		DeallocateBuffer(i);

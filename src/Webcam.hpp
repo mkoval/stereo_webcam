@@ -49,6 +49,9 @@ private:
 	std::list<Resolution> GetResolutions(uint32_t pixel_format) const;
 	std::list<double>     GetFPSs(uint32_t pixel_format, Resolution res) const;
 
+	Webcam(Webcam const &src);
+	Webcam &operator=(Webcam const &src);
+
 	void GetParam(v4l2_streamparm &param);
 	void SetParam(v4l2_streamparm const &param);
 

@@ -1,6 +1,7 @@
 #ifndef CAMERAMONITOR_HPP_
 #define CAMERAMONITOR_HPP_
 
+#include <boost/thread/condition.hpp>
 #include <boost/thread/mutex.hpp>
 #include <queue>
 
@@ -14,7 +15,7 @@ public:
 
 	void operator()(void);
 
-	bool HasFrame(void) const;
+	void WaitForFrame(void) const;
 	void GetFrame(CameraFrame &);
 
 private:
@@ -28,7 +29,10 @@ private:
 	Webcam *const m_cam;
 	std::queue<CameraFrame *> m_available;
 	std::priority_queue<CameraFrame *, std::vector<CameraFrame *>, CmpFramePtrs> m_frames;
-	boost::mutex m_frames_mutex;
+
+	// Controls access to the priority queue.
+	boost::mutex     m_frames_mutex;
+	boost::condition m_frames_cond;
 };
 
 #endif

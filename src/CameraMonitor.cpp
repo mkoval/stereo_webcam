@@ -29,41 +29,44 @@ CameraMonitor::~CameraMonitor(void)
 	}
 }
 
-#include <iostream>
 void CameraMonitor::operator()(void)
 {
 	for (;;) {
 		m_cam->WaitForFrame(-1);
-
 		boost::mutex::scoped_lock lock(m_frames_mutex);
 
 		// Force the priority queue to act like a ring buffer by throwing away
 		// the oldest element when it is full.
-		// XXX: not thread safe
+
 		if (m_available.empty()) {
 			m_available.push(m_frames.top());
 			m_frames.pop();
 		}
 
 		// Add the latest frame to the priority queue.
-		// XXX: not thread safe
-		CameraFrame *frame = m_available.front();
+		CameraFrame *frame     = m_available.front();
+		bool         was_empty = m_frames.empty();
 		m_available.pop();
 
 		m_cam->GetFrame(*frame);
 		m_frames.push(frame);
+
+		// Notify consumers that a frame is available.
+		lock.unlock();
+		if (was_empty) {
+			m_frames_cond.notify_one();
+		}
 	}
 }
 
-bool CameraMonitor::HasFrame(void) const
-{
-	return !m_frames.empty();
-}
-
-#include <iostream>
 void CameraMonitor::GetFrame(CameraFrame &frame)
 {
 	boost::mutex::scoped_lock lock(m_frames_mutex);
+
+	// Wait for a frame to become available using a condition variable.
+	while (m_frames.empty()) {
+		m_frames_cond.wait(lock);
+	}
 
 	CameraFrame *frame_new = m_frames.top();
 	m_frames.pop();

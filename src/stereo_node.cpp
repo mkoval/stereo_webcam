@@ -1,5 +1,6 @@
 #include <exception>
 #include <iostream>
+#include <string>
 
 #include <boost/thread.hpp>
 
@@ -85,12 +86,10 @@ int main(int argc, char **argv)
 			// Wait for new frames from the camera(s).
 			// TODO: Make this more efficient with condition variables.
 			if (adv_left) {
-				while (!mon_left.HasFrame());
 				mon_left.GetFrame(frame_left);
 				adv_left = false;
 			}
 			if (adv_right) {
-				while(!mon_right.HasFrame());
 				mon_right.GetFrame(frame_right);
 				adv_right = false;
 			}

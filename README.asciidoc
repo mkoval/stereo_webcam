@@ -1,6 +1,6 @@
 Interesting Links
 =================
- - [[Original VSYNC Hack|http://sszymczy.rootnode.net/index.php?menu=projects&submenu=webcamsync2&subsub=PS3Eye]]: Modification instructions for the original hardware revision.
- - [[Updated VSYNC Hack|http://www.instructables.com/id/The-EyeWriter-20/step9/Hacking-the-PS-Eye-camera-VSync/]]: Includes instructions for both the original and second hardware revisions.
- - [[Original Teardown IR Filter Removal|http://nuigroup.com/forums/viewthread/2953/]]: Teardown and IR filter removal for the original hardware revision.
- - [[Updated Teardown and IR Filter Removal|http://codelaboratories.com/research/view/ps3-eye-disassembly]]: Teardown and IR filter removal for the second hardware revision.
+ - http://sszymczy.rootnode.net/index.php?menu=projects&submenu=webcamsync2&subsub=PS3Eye[Original VSYNC Hack]: Modification instructions for the original hardware revision.
+ - http://www.instructables.com/id/The-EyeWriter-20/step9/Hacking-the-PS-Eye-camera-VSync/[Updated VSYNC Hack]: Includes instructions for both the original and second hardware revisions.
+ - http://nuigroup.com/forums/viewthread/2953/[Original Teardown]: Teardown and IR filter removal for the original hardware revision.
+ - http://codelaboratories.com/research/view/ps3-eye-disassembly[Updated Teardown]: Teardown and IR filter removal for the second hardware revision.

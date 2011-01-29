@@ -60,12 +60,13 @@ static void yuv422_to_rgb(uint8_t const *src, uint8_t *dst)
 	yuv444_to_rgb(y2, cb, cr, dst + 3);
 }
 
-Webcam::Webcam(std::string file) {
+Webcam::Webcam(std::string file, size_t nbufs)
+	: m_bufs(nbufs)
+{
 	int ret;
 
 	// Access mode is O_RDWR instead of as specified in the V4L documentation.
-	m_fd    = open(file.c_str(), O_RDWR);
-	m_nbufs = 2;
+	m_fd = open(file.c_str(), O_RDWR);
 
 	// TODO: Replace the error messages with a custom exception class.
 	if (m_fd == -1) {
@@ -74,47 +75,26 @@ Webcam::Webcam(std::string file) {
 
 	// Request the appropriate number of buffers or mmap IO.
 	v4l2_requestbuffers req_bufs;
-	req_bufs.count  = m_nbufs;
+	req_bufs.count  = nbufs;
 	req_bufs.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	req_bufs.memory = V4L2_MEMORY_MMAP;
 	ret = ioctl(m_fd, VIDIOC_REQBUFS, &req_bufs);
-	if (ret == -1 || req_bufs.count < m_nbufs) {
+	if (ret == -1 || req_bufs.count < nbufs) {
 		throw std::runtime_error("unable to allocate memory-mapped buffer");
 	}
 
-	// Allocate memmap buffers for recieving the frames.
-	// TODO: Move this into SetStreaming().
-	m_bufs.resize(req_bufs.count);
-	for (uint32_t i = 0; i < req_bufs.count; ++i) {
-		struct v4l2_buffer *buffer = new v4l2_buffer;
-
-		memset(buffer, 0, sizeof(v4l2_buffer));
-		buffer->type   = req_bufs.type;
-		buffer->memory = req_bufs.memory;
-		buffer->index  = i;
-
-		ret = ioctl(m_fd, VIDIOC_QUERYBUF, buffer);
-		if (ret == -1) {
-			switch (errno) {
-			case EINVAL:
-				throw std::runtime_error("driver does not support memory-mapped IO");
-
-			default:
-				throw std::runtime_error("unable to enqueue memory-mapped buffer");
-			}
+	// Allocate memory-mapped buffers in the kernel using V4L.
+	size_t i;
+	try {
+		for (i = 0; i < nbufs; ++i) {
+			m_bufs[i].ptr = NULL;
+			AllocateBuffer(i);
 		}
-
-		// Save the length for munmap() later.
-		m_bufs[i].ptr = mmap(NULL, buffer->length, PROT_READ | PROT_WRITE,
-		                     MAP_SHARED, m_fd, buffer->m.offset);
-		m_bufs[i].len = buffer->length;
-		m_bufs[i].buf = buffer;
-
-		if (m_bufs[i].ptr == MAP_FAILED) {
-			// XXX: Free memory with munmap() before failing.
-			throw std::runtime_error("unable to memory map frame buffer");
+	} catch (std::runtime_error &err) {
+		for (size_t j = 0; j < i; ++j) {
+			DeallocateBuffer(j);
 		}
-
+		throw err;
 	}
 
 	// Fetch default configuration data from the camera.
@@ -123,8 +103,8 @@ Webcam::Webcam(std::string file) {
 }
 
 Webcam::~Webcam(void) {
-	for (uint32_t i = 0; i < m_bufs.size(); ++i) {
-		munmap(m_bufs[i].ptr, m_bufs[i].len);
+	for (size_t i = 0; i < m_bufs.size(); ++i) {
+		DeallocateBuffer(i);
 	}
 }
 
@@ -354,4 +334,49 @@ std::list<double> Webcam::GetFPSs(uint32_t pixel_format, Resolution res) const {
 		++it.index;
 	}
 	return fpss;
+}
+
+void Webcam::AllocateBuffer(size_t index)
+{
+	int ret;
+	if (m_bufs[index].ptr != NULL) return;
+
+	// Request a new buffer from V4L.
+	v4l2_buffer *buffer = new v4l2_buffer;
+	buffer->type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	buffer->memory = V4L2_MEMORY_MMAP;
+	buffer->index  = index;
+
+	ret = ioctl(m_fd, VIDIOC_QUERYBUF, buffer);
+	if (ret == -1) {
+		delete buffer;
+
+		switch (errno) {
+		case EINVAL:
+			throw std::runtime_error("driver does not support memory-mapped IO");
+
+		default:
+			throw std::runtime_error("unable to enqueue memory-mapped buffer");
+		}
+	}
+
+	// Use the information returned by V4L to memmap the kernel's buffer.
+	m_bufs[index].ptr = mmap(NULL, buffer->length, PROT_READ | PROT_WRITE,
+	                          MAP_SHARED, m_fd, buffer->m.offset);
+	m_bufs[index].len = buffer->length;
+	m_bufs[index].buf = buffer;
+
+	if (m_bufs[index].ptr == MAP_FAILED) {
+		delete buffer;
+		throw std::runtime_error("unable to memory map frame buffer");
+	}
+}
+
+void Webcam::DeallocateBuffer(size_t index)
+{
+	if (m_bufs[index].ptr == NULL) return;
+
+	delete m_bufs[index].buf;
+	munmap(m_bufs[index].ptr, m_bufs[index].len);
+	m_bufs[index].ptr = NULL;
 }

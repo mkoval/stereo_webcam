@@ -13,12 +13,12 @@
 
 class Webcam {
 public:
-	Webcam(std::string file);
+	Webcam(std::string file, size_t nbufs);
 	~Webcam(void);
 
 	void SetStreaming(bool streaming);
 
-	CameraFrame &GetFrame(CameraFrame &);
+	CameraFrame &GetFrame(CameraFrame &frame);
 	void WaitForFrame(int to_ms) const;
 
 	uint32_t GetWidth(void) const;
@@ -41,7 +41,6 @@ private:
 	};
 
 	int m_fd;
-	uint32_t m_nbufs;
 	v4l2_streamparm     m_param;
 	v4l2_format         m_fmt_pix;
 	std::vector<Buffer> m_bufs;
@@ -55,6 +54,9 @@ private:
 
 	void GetFormat(v4l2_format &fmt);
 	void SetFormat(v4l2_format const &fmt);
+
+	void AllocateBuffer(size_t index);
+	void DeallocateBuffer(size_t index);
 };
 
 #endif

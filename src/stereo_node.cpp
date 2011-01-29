@@ -8,6 +8,7 @@
 #include <sensor_msgs/Image.h>
 
 #include "CameraFrame.hpp"
+#include "CameraFrameComparator.hpp"
 #include "CameraMonitor.hpp"
 #include "TimeConverter.hpp"
 #include "Webcam.hpp"
@@ -62,6 +63,9 @@ int main(int argc, char **argv)
 		Webcam cam_left(argv[1], BUFFER_NUM);
 		Webcam cam_right(argv[2], BUFFER_NUM);
 
+		// Configure the accuracy of the equality test using the frame rate.
+		CameraFrameComparator frame_comp(0.5 / cam_left.GetFPS());
+
 		cam_left.SetStreaming(true);
 		cam_right.SetStreaming(true);
 
@@ -74,27 +78,50 @@ int main(int argc, char **argv)
 		CameraFrame frame_left;
 		CameraFrame frame_right;
 
-		// TODO: Use a multi-threaded program instead of a busy loop.
+		bool adv_left  = true;
+		bool adv_right = true;
+
 		while (ros::ok()) {
-			if (mon_left.HasFrame()) {
+			// Wait for new frames from the camera(s).
+			// TODO: Make this more efficient with condition variables.
+			if (adv_left) {
+				while (!mon_left.HasFrame());
 				mon_left.GetFrame(frame_left);
-
-				Image msg_left = FrameToImageMsg(frame_left);
-				msg_left.header.stamp     = time_conv.SysToROS(frame_left.GetTimestamp());
-				msg_left.header.frame_id  = "stereo/left_link";
-
-				pub_left.publish(msg_left);
-			} else if (mon_right.HasFrame()) {
+				adv_left = false;
+			}
+			if (adv_right) {
+				while(!mon_right.HasFrame());
 				mon_right.GetFrame(frame_right);
-
-				Image msg_right = FrameToImageMsg(frame_right);
-				msg_right.header.stamp    = time_conv.SysToROS(frame_right.GetTimestamp());
-				msg_right.header.frame_id = "stereo/right_link";
-
-				pub_right.publish(msg_right);
+				adv_right = false;
 			}
 
-			ros::spinOnce();
+			// Synchronized (time_left == time_right)
+			int frame_comp_res = frame_comp.Compare(frame_left, frame_right);
+			if (!frame_comp_res) {
+				// TODO: Choose the (slightly) higher of the two timestamps.
+				ros::Time time = time_conv.SysToROS(frame_left.GetTimestamp());
+
+				Image msg_left = FrameToImageMsg(frame_left);
+				msg_left.header.stamp     = time;
+				msg_left.header.frame_id  = "stereo/left_link";
+				pub_left.publish(msg_left);
+
+				Image msg_right = FrameToImageMsg(frame_right);
+				msg_right.header.stamp     = time;
+				msg_right.header.frame_id  = "stereo/right_link";
+				pub_right.publish(msg_right);
+
+				adv_left  = true;
+				adv_right = true;
+			}
+			// Left lagging (time_left < time_right)
+			else if (frame_comp_res < 0) {
+				adv_left  = true;
+			}
+			// Right lagging (time_left > time_right)
+			else {
+				adv_right = true;
+			}
 		}
 	} catch (std::exception const &err) {
 		std::cerr << "err: " << err.what() << std::endl;

@@ -87,5 +87,5 @@ bool CameraMonitor::CmpFramePtrs::operator()(CameraFrame const *x, CameraFrame c
 	// Sort by timestamp in ascending order.
 	timeval time_x = x->GetTimestamp();
 	timeval time_y = y->GetTimestamp();
-	return !timercmp(&time_x, &time_y, >);
+	return timercmp(&time_x, &time_y, >);
 }

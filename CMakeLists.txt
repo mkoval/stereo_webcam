@@ -19,6 +19,7 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 
 rosbuild_add_executable(stereo_node
 	src/stereo_node.cpp
+	src/CameraMonitor.cpp
 	src/CameraFrame.cpp
 	src/Webcam.cpp
 	src/TimeConverter.cpp

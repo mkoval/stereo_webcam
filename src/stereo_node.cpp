@@ -1,11 +1,14 @@
 #include <exception>
 #include <iostream>
 
+#include <boost/thread.hpp>
+
 #include <ros/ros.h>
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/Image.h>
 
 #include "CameraFrame.hpp"
+#include "CameraMonitor.hpp"
 #include "TimeConverter.hpp"
 #include "Webcam.hpp"
 
@@ -62,25 +65,35 @@ int main(int argc, char **argv)
 		cam_left.SetStreaming(true);
 		cam_right.SetStreaming(true);
 
+		// Internally buffer each camera to find frame correspondances.
+		CameraMonitor mon_left(cam_left, 5);
+		CameraMonitor mon_right(cam_right, 5);
+		boost::thread thread_left(boost::ref(mon_left));
+		boost::thread thread_right(boost::ref(mon_right));
+
+		CameraFrame frame_left;
+		CameraFrame frame_right;
+
 		// TODO: Use a multi-threaded program instead of a busy loop.
 		while (ros::ok()) {
-			cam_left.WaitForFrame(TIMEOUT_MS);
-			cam_right.WaitForFrame(TIMEOUT_MS);
+			if (mon_left.HasFrame()) {
+				mon_left.GetFrame(frame_left);
 
-			cam_left.GetFrame(frame_left);
-			cam_right.GetFrame(frame_right);
+				Image msg_left = FrameToImageMsg(frame_left);
+				msg_left.header.stamp     = time_conv.SysToROS(frame_left.GetTimestamp());
+				msg_left.header.frame_id  = "stereo/left_link";
 
-			// Wrap the frames in a sensor_msgs::Image message.
-			Image msg_left = FrameToImageMsg(frame_left);
-			msg_left.header.stamp     = time_conv.SysToROS(frame_left.GetTimestamp());
-			msg_left.header.frame_id  = "stereo/left_link";
+				pub_left.publish(msg_left);
+			} else if (mon_right.HasFrame()) {
+				mon_right.GetFrame(frame_right);
 
-			Image msg_right = FrameToImageMsg(frame_right);
-			msg_left.header.stamp     = time_conv.SysToROS(frame_right.GetTimestamp());
-			msg_right.header.frame_id = "stereo/right_link";
+				Image msg_right = FrameToImageMsg(frame_right);
+				msg_right.header.stamp    = time_conv.SysToROS(frame_right.GetTimestamp());
+				msg_right.header.frame_id = "stereo/right_link";
 
-			pub_left.publish(msg_left);
-			pub_right.publish(msg_right);
+				pub_right.publish(msg_right);
+			}
+
 			ros::spinOnce();
 		}
 	} catch (std::exception const &err) {

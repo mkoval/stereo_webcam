@@ -12,7 +12,6 @@ public:
 	~CameraFrame(void);
 
 	CameraFrame &operator=(CameraFrame const &src);
-	bool operator<(CameraFrame const &other) const;
 
 	bool IsValid(void) const;
 	uint32_t GetWidth(void) const;

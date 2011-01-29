@@ -29,10 +29,13 @@ CameraMonitor::~CameraMonitor(void)
 	}
 }
 
+#include <iostream>
 void CameraMonitor::operator()(void)
 {
 	for (;;) {
 		m_cam->WaitForFrame(-1);
+
+		boost::mutex::scoped_lock lock(m_frames_mutex);
 
 		// Force the priority queue to act like a ring buffer by throwing away
 		// the oldest element when it is full.
@@ -57,16 +60,15 @@ bool CameraMonitor::HasFrame(void) const
 	return !m_frames.empty();
 }
 
+#include <iostream>
 void CameraMonitor::GetFrame(CameraFrame &frame)
 {
-	// XXX: not thread safe
-	frame = *m_frames.top();
-	m_frames.pop();
-}
+	boost::mutex::scoped_lock lock(m_frames_mutex);
 
-bool CameraMonitor::CmpFramePtrs(CameraFrame const *x, CameraFrame const *y)
-{
-	return !(*x < *y);
+	CameraFrame *frame_new = m_frames.top();
+	m_frames.pop();
+	m_available.push(frame_new);
+	frame = *frame_new;
 }
 
 CameraMonitor::CameraMonitor(CameraMonitor const &src)
@@ -78,4 +80,12 @@ CameraMonitor::CameraMonitor(CameraMonitor const &src)
 CameraMonitor &CameraMonitor::operator=(CameraMonitor const &src)
 {
 	throw std::runtime_error("assignment is not permitted");
+}
+
+bool CameraMonitor::CmpFramePtrs::operator()(CameraFrame const *x, CameraFrame const *y) const
+{
+	// Sort by timestamp in ascending order.
+	timeval time_x = x->GetTimestamp();
+	timeval time_y = y->GetTimestamp();
+	return !timercmp(&time_x, &time_y, >);
 }

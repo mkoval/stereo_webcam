@@ -37,11 +37,6 @@ CameraFrame &CameraFrame::operator=(CameraFrame const &src)
 	return *this;
 }
 
-bool CameraFrame::operator<(CameraFrame const &other) const
-{
-	return !timercmp(&m_time, &other.m_time, <);
-}
-
 bool CameraFrame::IsValid(void) const
 {
 	return m_data != NULL;

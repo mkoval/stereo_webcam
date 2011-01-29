@@ -6,6 +6,7 @@
 #include <sensor_msgs/Image.h>
 
 #include "CameraFrame.hpp"
+#include "TimeConverter.hpp"
 #include "Webcam.hpp"
 
 using sensor_msgs::Image;
@@ -44,6 +45,13 @@ int main(int argc, char **argv)
 	ros::Publisher pub_left  = nh.advertise<Image>("stereo/left", 10);
 	ros::Publisher pub_right = nh.advertise<Image>("stereo/right", 10);
 
+	// Convert between system timestamps and ROS timestamps using a single pair
+	// of corresonding times.
+	ros::Time init_ros = ros::Time::now();
+	timeval   init_sys;
+	gettimeofday(&init_sys, NULL);
+	TimeConverter time_conv(init_sys, init_ros);
+
 	CameraFrame frame_left;
 	CameraFrame frame_right;
 
@@ -64,12 +72,12 @@ int main(int argc, char **argv)
 
 			// Wrap the frames in a sensor_msgs::Image message.
 			Image msg_left = FrameToImageMsg(frame_left);
-			msg_left.header.stamp     = ros::Time(0, 0); // XXX: Convert timestamp.
-			msg_left.header.frame_id  = "stereo/left"; // TODO: naming convention
+			msg_left.header.stamp     = time_conv.SysToROS(frame_left.GetTimestamp());
+			msg_left.header.frame_id  = "stereo/left_link";
 
 			Image msg_right = FrameToImageMsg(frame_right);
-			msg_right.header.stamp    = ros::Time(0, 0); // XXX: Convert timestamp.
-			msg_right.header.frame_id = "stereo/right"; // TODO: naming convention
+			msg_left.header.stamp     = time_conv.SysToROS(frame_right.GetTimestamp());
+			msg_right.header.frame_id = "stereo/right_link";
 
 			pub_left.publish(msg_left);
 			pub_right.publish(msg_right);

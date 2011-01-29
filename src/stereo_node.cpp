@@ -38,17 +38,18 @@ Image FrameToImageMsg(CameraFrame const &src)
 
 int main(int argc, char **argv)
 {
-	if (argc <= 2) {
-		std::cerr << "err: incorrect number of arguments\n"
-		          << "usage: ./stereo_node <left> <right>"
-		          << std::endl;
-		return 1;
-	}
-
 	ros::init(argc, argv, "stereo_node");
 	ros::NodeHandle nh;
 	ros::Publisher pub_left  = nh.advertise<Image>("stereo/left", 10);
 	ros::Publisher pub_right = nh.advertise<Image>("stereo/right", 10);
+
+	// Paths to each of the camera device files.
+	std::string dev_left, dev_right;
+	nh.param("device_left",  dev_left,  std::string("/dev/video0"));
+	nh.param("device_right", dev_right, std::string("/dev/video1"));
+
+	// TODO: Allow configuration of other camera parameters.
+	// TODO: Fully support the ROS camera node requirements.
 
 	// Convert between system timestamps and ROS timestamps using a single pair
 	// of corresonding times.
@@ -61,8 +62,8 @@ int main(int argc, char **argv)
 	CameraFrame frame_right;
 
 	try {
-		Webcam cam_left(argv[1], BUFFER_NUM);
-		Webcam cam_right(argv[2], BUFFER_NUM);
+		Webcam cam_left(dev_left, BUFFER_NUM);
+		Webcam cam_right(dev_right, BUFFER_NUM);
 
 		// Configure the accuracy of the equality test using the frame rate.
 		CameraFrameComparator frame_comp(0.5 / cam_left.GetFPS());
@@ -76,15 +77,11 @@ int main(int argc, char **argv)
 		boost::thread thread_left(boost::ref(mon_left));
 		boost::thread thread_right(boost::ref(mon_right));
 
-		CameraFrame frame_left;
-		CameraFrame frame_right;
-
 		bool adv_left  = true;
 		bool adv_right = true;
 
 		while (ros::ok()) {
 			// Wait for new frames from the camera(s).
-			// TODO: Make this more efficient with condition variables.
 			if (adv_left) {
 				mon_left.GetFrame(frame_left);
 				adv_left = false;
@@ -121,6 +118,8 @@ int main(int argc, char **argv)
 			else {
 				adv_right = true;
 			}
+
+			// XXX: Unable to call ros::spin() as often as needed.
 		}
 	} catch (std::exception const &err) {
 		std::cerr << "err: " << err.what() << std::endl;

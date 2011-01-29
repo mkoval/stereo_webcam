@@ -18,8 +18,8 @@ int main(int argc, char **argv) {
 	}
 
 	try {
-		EyeCam cam1(argv[1]);
-		EyeCam cam2(argv[2]);
+		Webcam cam1(argv[1]);
+		Webcam cam2(argv[2]);
 		cam1.SetStreaming(true);
 		cam2.SetStreaming(true);
 

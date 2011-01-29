@@ -11,10 +11,10 @@
 
 #include "CameraFrame.hpp"
 
-class EyeCam {
+class Webcam {
 public:
-	EyeCam(std::string file);
-	~EyeCam(void);
+	Webcam(std::string file);
+	~Webcam(void);
 
 	void SetStreaming(bool streaming);
 

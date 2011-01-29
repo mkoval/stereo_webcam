@@ -1,7 +1,9 @@
 #include "Webcam.hpp"
 
 #include <cstring>
+#include <exception>
 #include <list>
+#include <stdexcept>
 #include <string>
 #include <errno.h>
 #include <fcntl.h>
@@ -58,7 +60,7 @@ static void yuv422_to_rgb(uint8_t const *src, uint8_t *dst)
 	yuv444_to_rgb(y2, cb, cr, dst + 3);
 }
 
-EyeCam::EyeCam(std::string file) {
+Webcam::Webcam(std::string file) {
 	int ret;
 
 	// Access mode is O_RDWR instead of as specified in the V4L documentation.
@@ -67,24 +69,7 @@ EyeCam::EyeCam(std::string file) {
 
 	// TODO: Replace the error messages with a custom exception class.
 	if (m_fd == -1) {
-		switch (errno) {
-		case EACCES:
-			throw "err: insufficient permissions to open device";
-
-		case EBUSY:
-			throw "err: camera is already in use";
-
-		case ENXIO:
-			throw "err: device does not exist";
-
-		case ENOMEM:
-		case EMFILE:
-		case ENFILE:
-			throw "err: an unknown error has occured";
-
-		default:
-			throw "err: error opening device";
-		}
+		throw std::invalid_argument("unable to open device");
 	}
 
 	// Request the appropriate number of buffers or mmap IO.
@@ -94,10 +79,11 @@ EyeCam::EyeCam(std::string file) {
 	req_bufs.memory = V4L2_MEMORY_MMAP;
 	ret = ioctl(m_fd, VIDIOC_REQBUFS, &req_bufs);
 	if (ret == -1 || req_bufs.count < m_nbufs) {
-		throw "err: unable to allocate memory-mapped buffers";
+		throw std::runtime_error("unable to allocate memory-mapped buffer");
 	}
 
 	// Allocate memmap buffers for recieving the frames.
+	// TODO: Move this into SetStreaming().
 	m_bufs.resize(req_bufs.count);
 	for (uint32_t i = 0; i < req_bufs.count; ++i) {
 		struct v4l2_buffer *buffer = new v4l2_buffer;
@@ -109,7 +95,13 @@ EyeCam::EyeCam(std::string file) {
 
 		ret = ioctl(m_fd, VIDIOC_QUERYBUF, buffer);
 		if (ret == -1) {
-			throw "err: unable to memory-map buffer";
+			switch (errno) {
+			case EINVAL:
+				throw std::runtime_error("driver does not support memory-mapped IO");
+
+			default:
+				throw std::runtime_error("unable to enqueue memory-mapped buffer");
+			}
 		}
 
 		// Save the length for munmap() later.
@@ -120,7 +112,7 @@ EyeCam::EyeCam(std::string file) {
 
 		if (m_bufs[i].ptr == MAP_FAILED) {
 			// XXX: Free memory with munmap() before failing.
-			throw "err: memory map failed";
+			throw std::runtime_error("unable to memory map frame buffer");
 		}
 
 	}
@@ -130,13 +122,13 @@ EyeCam::EyeCam(std::string file) {
 	GetFormat(m_fmt_pix);
 }
 
-EyeCam::~EyeCam(void) {
+Webcam::~Webcam(void) {
 	for (uint32_t i = 0; i < m_bufs.size(); ++i) {
 		munmap(m_bufs[i].ptr, m_bufs[i].len);
 	}
 }
 
-void EyeCam::SetStreaming(bool streaming) {
+void Webcam::SetStreaming(bool streaming) {
 	int ret;
 
 	// Begin by enqueing all of the buffers since they are dequeued when
@@ -145,7 +137,7 @@ void EyeCam::SetStreaming(bool streaming) {
 		for (size_t i = 0; i < m_bufs.size(); ++i) {
 			ret = ioctl(m_fd, VIDIOC_QBUF, m_bufs[i].buf);
 			if (ret == -1) {
-				throw "err: unable to enqueue memory-mapped buffer";
+				throw std::runtime_error("unable to enqueue empty buffer");
 			}
 		}
 	}
@@ -159,11 +151,11 @@ void EyeCam::SetStreaming(bool streaming) {
 	}
 
 	if (ret == -1) {
-		throw "err: unable to enable/disable streaming";
+		throw std::runtime_error("unable to change stream state");
 	}
 }
 
-CameraFrame &EyeCam::GetFrame(CameraFrame &frame) {
+CameraFrame &Webcam::GetFrame(CameraFrame &frame) {
 	int ret;
 
 	// Grab the most recent buffered frame; blocking.
@@ -174,7 +166,7 @@ CameraFrame &EyeCam::GetFrame(CameraFrame &frame) {
 
 	ret = ioctl(m_fd, VIDIOC_DQBUF, &buf);
 	if (ret == -1) {
-		throw "err: unable to dequeue buffer";
+		throw std::runtime_error("unable to dequeue image frame");
 	}
 
 	// Convert the Y'UV 4:2;2 image to RGB.
@@ -196,12 +188,12 @@ CameraFrame &EyeCam::GetFrame(CameraFrame &frame) {
 	// Add the buffer back to the queue for reuse.
 	ret = ioctl(m_fd, VIDIOC_QBUF, &buf);
 	if (ret == -1) {
-		throw "err: unable to enqueue used buffer";
+		throw std::runtime_error("unable to re-enqueue image frame");
 	}
 	return frame;
 }
 
-void EyeCam::SetFPS(uint32_t fps) {
+void Webcam::SetFPS(uint32_t fps) {
 	m_param.parm.capture.timeperframe.numerator   = 1;
 	m_param.parm.capture.timeperframe.denominator = fps;
 	SetParam(m_param);
@@ -209,81 +201,82 @@ void EyeCam::SetFPS(uint32_t fps) {
 	uint32_t fps_new = m_param.parm.capture.timeperframe.denominator
 	                 / m_param.parm.capture.timeperframe.numerator;
 	if (fps != fps_new) {
-		throw "err: invalid frame rate";
+		throw std::invalid_argument("unsupported frame rate");
 	}
 }
 
-double EyeCam::GetFPS(void) const {
+double Webcam::GetFPS(void) const {
+	// TODO: Verify that denom is not zero.
 	double numer = m_param.parm.capture.timeperframe.numerator;
 	double denom = m_param.parm.capture.timeperframe.denominator;
 	return denom / numer;
 }
 
-uint32_t EyeCam::GetWidth(void) const {
+uint32_t Webcam::GetWidth(void) const {
 	return m_fmt_pix.fmt.pix.width;
 }
 
-uint32_t EyeCam::GetHeight(void) const {
+uint32_t Webcam::GetHeight(void) const {
 	return m_fmt_pix.fmt.pix.height;
 }
 
-void EyeCam::SetResolution(uint32_t width, uint32_t height) {
+void Webcam::SetResolution(uint32_t width, uint32_t height) {
 	m_fmt_pix.fmt.pix.width  = width;
 	m_fmt_pix.fmt.pix.height = height;
 
 	SetFormat(m_fmt_pix);
 
 	if (m_fmt_pix.fmt.pix.width != width || m_fmt_pix.fmt.pix.height != height) {
-		throw "err: invalid resolution";
+		throw std::invalid_argument("unsupported resolution");
 	}
 }
 
-void EyeCam::WaitForFrame(int to_ms) const {
+void Webcam::WaitForFrame(int to_ms) const {
 	struct pollfd fds = { m_fd, POLLIN };
 	poll(&fds, 1, to_ms);
 }
 
-void EyeCam::GetParam(v4l2_streamparm &param) {
+void Webcam::GetParam(v4l2_streamparm &param) {
 	param.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	int ret = ioctl(m_fd, VIDIOC_G_PARM, &param);
 
 	if (ret == -1) {
-		throw "err: unable to get device parameters";
+		throw std::runtime_error("unable to fetch device parameters");
 	}
 }
 
-void EyeCam::SetParam(v4l2_streamparm const &param) {
+void Webcam::SetParam(v4l2_streamparm const &param) {
 	int ret = ioctl(m_fd, VIDIOC_S_PARM, &param);
 
 	if (ret == -1) {
-		throw "err: unable to set device parameters";
+		throw std::runtime_error("unable to change device parameters");
 	}
 }
 
-void EyeCam::GetFormat(v4l2_format &fmt) {
+void Webcam::GetFormat(v4l2_format &fmt) {
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	int ret = ioctl(m_fd, VIDIOC_G_FMT, &fmt);
 
 	if (ret == -1) {
-		throw "err: unable to get video format";
+		throw std::runtime_error("unable to fetch image format");
 	}
 }
 
-void EyeCam::SetFormat(v4l2_format const &fmt) {
+void Webcam::SetFormat(v4l2_format const &fmt) {
 	int ret;
 
 	ret = ioctl(m_fd, VIDIOC_S_FMT, &fmt);
 	if (ret == -1) {
-		throw "err: unable to set video format";
+		throw std::runtime_error("unable to negotiate image format");
 	}
 
 	ret = ioctl(m_fd, VIDIOC_S_FMT, &fmt);
 	if (ret == -1) {
-		throw "err: unable to set video format";
+		throw std::runtime_error("unable to change image format");
 	}
 }
 
-std::list<uint32_t> EyeCam::GetPixelFormats(void) const {
+std::list<uint32_t> Webcam::GetPixelFormats(void) const {
 	std::list<uint32_t> formats;
 	v4l2_fmtdesc it;
 	int ret;
@@ -299,7 +292,7 @@ std::list<uint32_t> EyeCam::GetPixelFormats(void) const {
 		} else if (errno == EINVAL) {
 			break; // Iteration is complete
 		} else {
-			throw "err: unable to detect formats";
+			throw std::runtime_error("automatic image format detection failed");
 		}
 
 		++it.index;
@@ -307,7 +300,7 @@ std::list<uint32_t> EyeCam::GetPixelFormats(void) const {
 	return formats;
 }
 
-std::list<EyeCam::Resolution> EyeCam::GetResolutions(uint32_t pixel_format) const {
+std::list<Webcam::Resolution> Webcam::GetResolutions(uint32_t pixel_format) const {
 	std::list<Resolution> resolutions;
 	v4l2_frmsizeenum it;
 	int ret;
@@ -327,7 +320,7 @@ std::list<EyeCam::Resolution> EyeCam::GetResolutions(uint32_t pixel_format) cons
 		} else if (errno == EINVAL) {
 			break; // Iteration is complete
 		} else {
-			throw "err: unable to detect frame sizes";
+			throw std::runtime_error("automatic frame size detection failed");
 		}
 
 		++it.index;
@@ -335,7 +328,7 @@ std::list<EyeCam::Resolution> EyeCam::GetResolutions(uint32_t pixel_format) cons
 	return resolutions;
 }
 
-std::list<double> EyeCam::GetFPSs(uint32_t pixel_format, Resolution res) const {
+std::list<double> Webcam::GetFPSs(uint32_t pixel_format, Resolution res) const {
 	std::list<double> fpss;
 	v4l2_frmivalenum it;
 	int ret;
@@ -356,7 +349,7 @@ std::list<double> EyeCam::GetFPSs(uint32_t pixel_format, Resolution res) const {
 		} else if (errno == EINVAL) {
 			break; // Iteration is complete
 		} else {
-			throw "err: unable to detect frame intervals";
+			throw std::runtime_error("automatic FPS detection failed");
 		}
 		++it.index;
 	}

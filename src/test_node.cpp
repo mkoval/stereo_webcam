@@ -1,5 +1,6 @@
-#include <exception>
 #include <iostream>
+#include <iomanip>
+#include <sstream>
 
 #include <opencv/cv.h>
 #include <opencv/highgui.h>
@@ -9,6 +10,12 @@
 #include "CameraFrameComparator.hpp"
 #include "CameraMonitor.hpp"
 #include "Webcam.hpp"
+
+static cv::Point  const TEXT_OFFSET(20, 480 - 20);
+static int        const TEXT_FONT(cv::FONT_HERSHEY_SIMPLEX);
+static double     const TEXT_SCALE(1.2);
+static cv::Scalar const TEXT_COLOR(0, 255, 0);
+static int        const TEXT_WIDTH(2);
 
 int main(int argc, char **argv)
 {
@@ -72,10 +79,25 @@ int main(int argc, char **argv)
 		src_left.copyTo(dst_left);
 		src_right.copyTo(dst_right);
 
+		// Superimpose the timestamp difference on the images.
+		timeval time_left  = frame_left.GetTimestamp();
+		timeval time_right = frame_right.GetTimestamp();
+		timeval time_diff  = CameraFrameComparator::GetTimeDelta(time_left, time_right);
+
+		std::stringstream ss1;
+		ss1 << time_diff.tv_sec << '.'
+		    << std::setw(6) << std::setfill('0') << time_diff.tv_usec;
+		cv::putText(dst, ss1.str(), TEXT_OFFSET, TEXT_FONT, TEXT_SCALE,
+		            TEXT_COLOR, TEXT_WIDTH);
+
 		// Write the concatenated frames to a file.
-		std::stringstream ss;
-		ss << prefix << i << '.' << extension;
-		cv::imwrite(ss.str(), dst);
+		std::stringstream ss2;
+		ss2 << prefix << i << '.' << extension;
+		cv::imwrite(ss2.str(), dst);
+
+		// Quit using the escape key.
+		//cv::imshow("Synchronization Test", dst);
+		//cv::waitKey(10);
 		++i;
 	}
 	return 0;

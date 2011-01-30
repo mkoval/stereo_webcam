@@ -1,7 +1,6 @@
 #include "CameraMonitor.hpp"
 
-#include <boost/threads/mutex.hpp>
-#include <boost/threads/locks.hpp>
+#include <boost/thread/mutex.hpp>
 #include <queue>
 #include <stdexcept>
 
@@ -35,7 +34,7 @@ void CameraMonitor::operator()(void)
 {
 	for (;;) {
 		m_cam->WaitForFrame(-1);
-		boost::mutex::unique_lock lock(m_frames_mutex);
+		boost::mutex::scoped_lock lock(m_frames_mutex);
 
 		// Force the priority queue to act like a ring buffer by throwing away
 		// the oldest element when it is full.
@@ -60,7 +59,7 @@ void CameraMonitor::operator()(void)
 
 void CameraMonitor::GetFrame(CameraFrame &frame)
 {
-	boost::mutex::unique_lock lock(m_frames_mutex);
+	boost::mutex::scoped_lock lock(m_frames_mutex);
 
 	// Wait for a frame to become available using a condition variable.
 	while (m_frames.empty()) {

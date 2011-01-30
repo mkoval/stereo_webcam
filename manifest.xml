@@ -6,5 +6,6 @@
 	<author>Michael Koval/koval.michael@gmail.com</author>
 	<license>BSD</license>
 	<review status="unreviewed" notes=""/>
+	<depend package="opencv2"/>
 	<depend package="sensor_msgs"/>
 </package>

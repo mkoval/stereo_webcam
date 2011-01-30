@@ -130,7 +130,7 @@ int main(int argc, char **argv)
 		g_info_right.header.frame_id = "stereo/right_link";
 		pub_info_right.publish(g_info_right);
 
-		ros::spin();
+		ros::spinOnce();
 	}
 	return 0;
 }

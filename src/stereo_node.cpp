@@ -98,63 +98,37 @@ int main(int argc, char **argv)
 	boost::thread thread_left(boost::ref(mon_left));
 	boost::thread thread_right(boost::ref(mon_right));
 
-	// Set the timestamp fuzzy-match threshold using the cameras' FPS.
-	CameraFrameComparator frame_comp(err_ratio / cam_left.GetFPS());
-
 	cam_left.SetStreaming(true);
 	cam_right.SetStreaming(true);
 
-	bool adv_left  = true;
-	bool adv_right = true;
-
 	while (ros::ok()) {
-		// Wait for new frames from the camera(s).
-		if (adv_left) {
-			mon_left.GetFrame(frame_left);
-			adv_left = false;
-		}
-		if (adv_right) {
-			mon_right.GetFrame(frame_right);
-			adv_right = false;
-		}
+		mon_left.GetFrame(frame_left);
+		mon_right.GetFrame(frame_right);
 
-		// Synchronized (time_left == time_right)
-		int frame_comp_res = frame_comp.Compare(frame_left, frame_right);
-		if (!frame_comp_res) {
-			// TODO: Choose the (slightly) higher of the two timestamps.
-			ros::Time time = time_conv.SysToROS(frame_left.GetTimestamp());
+		// TODO: Synchronize frames using timestamps.
 
-			// Left Camera's Image and CameraInfo
-			Image msg_left = FrameToImageMsg(frame_left);
-			msg_left.header.stamp      = time;
-			msg_left.header.frame_id   = "stereo/left_link";
-			pub_left.publish(msg_left);
+		// TODO: Choose the (slightly) higher of the two timestamps.
+		ros::Time time = time_conv.SysToROS(frame_left.GetTimestamp());
 
-			g_info_left.header.stamp     = time;
-			g_info_left.header.frame_id  = "stereo/left_link";
-			pub_info_left.publish(g_info_left);
+		// Left Camera's Image and CameraInfo
+		Image msg_left = FrameToImageMsg(frame_left);
+		msg_left.header.stamp      = time;
+		msg_left.header.frame_id   = "stereo/left_link";
+		pub_left.publish(msg_left);
 
-			// Right Camera's Image and CameraInfo
-			Image msg_right = FrameToImageMsg(frame_right);
-			msg_right.header.stamp     = time;
-			msg_right.header.frame_id  = "stereo/right_link";
-			pub_right.publish(msg_right);
+		g_info_left.header.stamp     = time;
+		g_info_left.header.frame_id  = "stereo/left_link";
+		pub_info_left.publish(g_info_left);
 
-			g_info_right.header.stamp    = time;
-			g_info_right.header.frame_id = "stereo/right_link";
-			pub_info_right.publish(g_info_right);
+		// Right Camera's Image and CameraInfo
+		Image msg_right = FrameToImageMsg(frame_right);
+		msg_right.header.stamp     = time;
+		msg_right.header.frame_id  = "stereo/right_link";
+		pub_right.publish(msg_right);
 
-			adv_left  = true;
-			adv_right = true;
-		}
-		// Left lagging (time_left < time_right)
-		else if (frame_comp_res < 0) {
-			adv_left  = true;
-		}
-		// Right lagging (time_left > time_right)
-		else {
-			adv_right = true;
-		}
+		g_info_right.header.stamp    = time;
+		g_info_right.header.frame_id = "stereo/right_link";
+		pub_info_right.publish(g_info_right);
 
 		ros::spin();
 	}

@@ -68,6 +68,8 @@ void CameraMonitor::GetFrame(CameraFrame &frame)
 		m_frames_cond.wait(lock);
 	}
 
+
+
 	CameraFrame *frame_new = m_frames.top();
 	m_frames.pop();
 	m_available.push(frame_new);

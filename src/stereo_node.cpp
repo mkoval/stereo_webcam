@@ -8,6 +8,7 @@
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/Image.h>
+#include <sensor_msgs/SetCameraInfo.h>
 
 #include "CameraFrame.hpp"
 #include "CameraFrameComparator.hpp"
@@ -15,11 +16,29 @@
 #include "TimeConverter.hpp"
 #include "Webcam.hpp"
 
+
+using sensor_msgs::SetCameraInfo;
 using sensor_msgs::CameraInfo;
 using sensor_msgs::Image;
 
-static size_t   const BUFFER_NUM = 2;
-static uint32_t const TIMEOUT_MS = 100;
+static CameraInfo g_info_left;
+static CameraInfo g_info_right;
+
+bool set_info_left(SetCameraInfo::Request &req, SetCameraInfo::Response &res)
+{
+	g_info_left = req.camera_info;
+	res.success        = true;
+	res.status_message = "";
+	return true;
+}
+
+bool set_info_right(SetCameraInfo::Request &req, SetCameraInfo::Response &res)
+{
+	g_info_right = req.camera_info;
+	res.success        = true;
+	res.status_message = "";
+	return true;
+}
 
 Image FrameToImageMsg(CameraFrame const &src)
 {
@@ -42,10 +61,13 @@ int main(int argc, char **argv)
 {
 	ros::init(argc, argv, "stereo_node");
 	ros::NodeHandle nh;
-	ros::Publisher pub_left  = nh.advertise<Image>("left/image_raw",  10);
-	ros::Publisher pub_right = nh.advertise<Image>("right/image_raw", 10);
-	ros::Publisher pub_info_left  = nh.advertise<CameraInfo>("left/camera_info", 10);
+
+	ros::Publisher pub_left       = nh.advertise<Image>("left/image_raw",  10);
+	ros::Publisher pub_right      = nh.advertise<Image>("right/image_raw", 10);
+	ros::Publisher pub_info_left  = nh.advertise<CameraInfo>("left/camera_info",  10);
 	ros::Publisher pub_info_right = nh.advertise<CameraInfo>("right/camera_info", 10);
+	ros::ServiceServer srv_left   = nh.advertiseService("left/set_camera_info",  set_info_left);
+	ros::ServiceServer srv_right  = nh.advertiseService("right/set_camera_info", set_info_right);
 
 	// Paths to each of the camera device files.
 	std::string dev_left, dev_right;
@@ -65,7 +87,6 @@ int main(int argc, char **argv)
 	gettimeofday(&init_sys, NULL);
 	TimeConverter time_conv(init_sys, init_ros);
 
-	CameraInfo  info_left,  info_right;
 	CameraFrame frame_left, frame_right;
 
 	Webcam cam_left(dev_left, 1);
@@ -103,17 +124,25 @@ int main(int argc, char **argv)
 			// TODO: Choose the (slightly) higher of the two timestamps.
 			ros::Time time = time_conv.SysToROS(frame_left.GetTimestamp());
 
+			// Left Camera's Image and CameraInfo
 			Image msg_left = FrameToImageMsg(frame_left);
-			msg_left.header.stamp     = time;
-			msg_left.header.frame_id  = "stereo/left_link";
+			msg_left.header.stamp      = time;
+			msg_left.header.frame_id   = "stereo/left_link";
 			pub_left.publish(msg_left);
-			pub_info_left.publish(info_left);
 
+			g_info_left.header.stamp     = time;
+			g_info_left.header.frame_id  = "stereo/left_link";
+			pub_info_left.publish(g_info_left);
+
+			// Right Camera's Image and CameraInfo
 			Image msg_right = FrameToImageMsg(frame_right);
 			msg_right.header.stamp     = time;
 			msg_right.header.frame_id  = "stereo/right_link";
 			pub_right.publish(msg_right);
-			pub_info_right.publish(info_right);
+
+			g_info_right.header.stamp    = time;
+			g_info_right.header.frame_id = "stereo/right_link";
+			pub_info_right.publish(g_info_right);
 
 			adv_left  = true;
 			adv_right = true;
@@ -127,7 +156,7 @@ int main(int argc, char **argv)
 			adv_right = true;
 		}
 
-		// XXX: Unable to call ros::spin() as often as needed.
+		ros::spin();
 	}
 	return 0;
 }

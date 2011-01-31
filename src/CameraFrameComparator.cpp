@@ -1,9 +1,16 @@
 #include "CameraFrameComparator.hpp"
 
+#include <iomanip>
+#include <iostream>
+static void PrintTime(timeval time) {
+	std::cout << time.tv_sec << '.'
+	          << std::setw(6) << std::setfill('0') << time.tv_usec;
+}
+
 CameraFrameComparator::CameraFrameComparator(double err_time)
 {
 	m_err.tv_sec  = (time_t)err_time;
-	m_err.tv_usec = (time_t)((err_time - (int)err_time) * 1.0e6);
+	m_err.tv_usec = (time_t)((err_time - (time_t)err_time) * 1.0e6);
 }
 
 timeval CameraFrameComparator::GetTimeDelta(timeval x, timeval y)
@@ -26,11 +33,12 @@ int CameraFrameComparator::Compare(CameraFrame const &x, CameraFrame const &y) c
 	// Calculate the magnitude of error between the frames' timestamps.
 	if (timercmp(&time_x, &time_y, >)) {
 		timersub(&time_x, &time_y, &diff);
-	} else if (timercmp(&time_x, &time_y, >)) {
+	} else if (timercmp(&time_x, &time_y, <)) {
 		timersub(&time_y, &time_x, &diff);
 	}
 
 	if      (timercmp(&diff, &m_err, <))    { return  0; }
 	else if (timercmp(&time_x, &time_y, <)) { return -1; }
 	else                                    { return +1; }
+
 }

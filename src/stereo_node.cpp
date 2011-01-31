@@ -85,7 +85,9 @@ int main(int argc, char **argv)
 	ros::Time init_ros = ros::Time::now();
 	timeval   init_sys;
 	gettimeofday(&init_sys, NULL);
+
 	TimeConverter time_conv(init_sys, init_ros);
+	CameraFrameComparator comp(0.005);
 
 	CameraFrame frame_left, frame_right;
 
@@ -101,35 +103,46 @@ int main(int argc, char **argv)
 	cam_left.SetStreaming(true);
 	cam_right.SetStreaming(true);
 
+	bool adv_left  = true;
+	bool adv_right = true;
+
 	while (ros::ok()) {
-		mon_left.GetFrame(frame_left);
-		mon_right.GetFrame(frame_right);
+		// Resynchronize by only advancing the lagging camera.
+		if (adv_left)  mon_left.GetFrame(frame_left);
+		if (adv_right) mon_right.GetFrame(frame_right);
+		adv_left  = false;
+		adv_right = false;
 
 		// TODO: Synchronize frames using timestamps.
+		int order = comp.Compare(frame_left, frame_right);
+		if (order == 0) {
+			// TODO: Choose the (slightly) higher of the two timestamps.
+			ros::Time time = time_conv.SysToROS(frame_left.GetTimestamp());
 
-		// TODO: Choose the (slightly) higher of the two timestamps.
-		ros::Time time = time_conv.SysToROS(frame_left.GetTimestamp());
+			// Left Camera's Image and CameraInfo
+			Image msg_left = FrameToImageMsg(frame_left);
+			msg_left.header.stamp      = time;
+			msg_left.header.frame_id   = "stereo/left_link";
+			pub_left.publish(msg_left);
 
-		// Left Camera's Image and CameraInfo
-		Image msg_left = FrameToImageMsg(frame_left);
-		msg_left.header.stamp      = time;
-		msg_left.header.frame_id   = "stereo/left_link";
-		pub_left.publish(msg_left);
+			g_info_left.header.stamp     = time;
+			g_info_left.header.frame_id  = "stereo/left_link";
+			pub_info_left.publish(g_info_left);
 
-		g_info_left.header.stamp     = time;
-		g_info_left.header.frame_id  = "stereo/left_link";
-		pub_info_left.publish(g_info_left);
+			// Right Camera's Image and CameraInfo
+			Image msg_right = FrameToImageMsg(frame_right);
+			msg_right.header.stamp     = time;
+			msg_right.header.frame_id  = "stereo/right_link";
+			pub_right.publish(msg_right);
 
-		// Right Camera's Image and CameraInfo
-		Image msg_right = FrameToImageMsg(frame_right);
-		msg_right.header.stamp     = time;
-		msg_right.header.frame_id  = "stereo/right_link";
-		pub_right.publish(msg_right);
-
-		g_info_right.header.stamp    = time;
-		g_info_right.header.frame_id = "stereo/right_link";
-		pub_info_right.publish(g_info_right);
-
+			g_info_right.header.stamp    = time;
+			g_info_right.header.frame_id = "stereo/right_link";
+			pub_info_right.publish(g_info_right);
+		} else if (order < 0) {
+			adv_left = true;
+		} else if (order > 0) {
+			adv_right = true;
+		}
 		ros::spinOnce();
 	}
 	return 0;

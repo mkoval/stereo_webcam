@@ -44,16 +44,24 @@ int main(int argc, char **argv)
 	boost::thread thread_left(boost::ref(mon_left));
 	boost::thread thread_right(boost::ref(mon_right));
 
+	CameraFrameComparator comp(0.0005);
+
 	cam_left.SetStreaming(true);
 	cam_right.SetStreaming(true);
+
+	bool adv_left  = true;
+	bool adv_right = true;
 
 	uint32_t i = 0;
 	for (;;) {
 		// Wait for new frames from the camera(s).
-		mon_left.GetFrame(frame_left);
-		mon_right.GetFrame(frame_right);
+		if (adv_left)  mon_left.GetFrame(frame_left);
+		if (adv_right) mon_right.GetFrame(frame_right);
+		adv_left  = false;
+		adv_right = false;
 
-		// TODO: Pair frames using the timestamp.
+		int order = comp.Compare(frame_left, frame_right);
+
 		uint32_t width_left   = frame_left.GetWidth();
 		uint32_t width_right  = frame_right.GetWidth();
 		uint32_t width        = width_left;
@@ -84,21 +92,39 @@ int main(int argc, char **argv)
 		timeval time_right = frame_right.GetTimestamp();
 		timeval time_diff  = CameraFrameComparator::GetTimeDelta(time_left, time_right);
 
+		// Time Delta
 		std::stringstream ss1;
 		ss1 << time_diff.tv_sec << '.'
-		    << std::setw(6) << std::setfill('0') << time_diff.tv_usec;
-		cv::putText(dst, ss1.str(), TEXT_OFFSET, TEXT_FONT, TEXT_SCALE,
-		            TEXT_COLOR, TEXT_WIDTH);
+			<< std::setw(6) << std::setfill('0') << time_diff.tv_usec;
+		cv::putText(dst, ss1.str(), cv::Point(20, height - 20), TEXT_FONT,
+		            TEXT_SCALE, TEXT_COLOR, TEXT_WIDTH);
+
+		// Synchronization State
+		std::string state;
+		if (order == 0) {
+			state = "SYNC";
+		} else if (order < 0) {
+			state = "LAGL";
+		} else if (order > 0) {
+			state = "LAGR";
+		}
+		cv::putText(dst, state, cv::Point(width - 100, height - 20), TEXT_FONT,
+		            TEXT_SCALE, TEXT_COLOR, TEXT_WIDTH);
 
 		// Write the concatenated frames to a file.
 		std::stringstream ss2;
 		ss2 << prefix << i << '.' << extension;
 		cv::imwrite(ss2.str(), dst);
-
-		// Quit using the escape key.
-		//cv::imshow("Synchronization Test", dst);
-		//cv::waitKey(10);
 		++i;
+
+		if (order == 0) {
+			adv_left  = true;
+			adv_right = true;
+		} else if (order < 0) {
+			adv_left = true;
+		} else if (order > 0) {
+			adv_right = true;
+		}
 	}
 	return 0;
 }

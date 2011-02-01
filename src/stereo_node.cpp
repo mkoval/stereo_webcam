@@ -118,7 +118,6 @@ int main(int argc, char **argv)
 
 		// TODO: Synchronize frames using timestamps.
 		int order = comp.Compare(frame_left, frame_right);
-		std::cerr << "order = " << order << std::endl;
 		if (order == 0) {
 			// TODO: Choose the (slightly) higher of the two timestamps.
 			ros::Time time = time_conv.SysToROS(frame_left.GetTimestamp());

@@ -74,11 +74,20 @@ int main(int argc, char **argv)
 	double err_ratio;
 	int    nbuf;
 
-	nh.param("device_left",  dev_left,  std::string("/dev/video0"));
-	nh.param("device_right", dev_right, std::string("/dev/video1"));
-	nh.param("buffers",      nbuf,      10);
-	nh.param("error_ratio",  err_ratio, 0.5);
+	ros::NodeHandle nh_priv("~");
+	nh_priv.param("device_left",  dev_left,  std::string("/dev/video0"));
+	nh_priv.param("device_right", dev_right, std::string("/dev/video1"));
+	nh_priv.param("buffers",      nbuf,      10);
+	nh_priv.param("error_ratio",  err_ratio, 0.5);
+	// TODO: Enable use of the error_ratio parameter.
 	// TODO: Allow configuration of other camera parameters.
+
+	if (nbuf < 1) {
+		ROS_ERROR("number of kernel buffers must be non-negative");
+		return 1;
+	} else if (nbuf == 1) {
+		ROS_WARN("must use at least two buffers for synchronization to succeed");
+	}
 
 	// Convert between system timestamps and ROS timestamps using a single pair
 	// of corresonding times.
@@ -87,18 +96,12 @@ int main(int argc, char **argv)
 	gettimeofday(&init_sys, NULL);
 
 	TimeConverter time_conv(init_sys, init_ros);
-	CameraFrameComparator comp(0.005);
+	CameraFrameComparator comp(0.0005);
 
 	CameraFrame frame_left, frame_right;
 
-	Webcam cam_left(dev_left, 1);
-	Webcam cam_right(dev_right, 1);
-
-	// Buffer the frames in user-space for resynchronization.
-	CameraMonitor mon_left(cam_left,   nbuf);
-	CameraMonitor mon_right(cam_right, nbuf);
-	boost::thread thread_left(boost::ref(mon_left));
-	boost::thread thread_right(boost::ref(mon_right));
+	Webcam cam_left(dev_left, nbuf);
+	Webcam cam_right(dev_right, nbuf);
 
 	cam_left.SetStreaming(true);
 	cam_right.SetStreaming(true);
@@ -108,13 +111,14 @@ int main(int argc, char **argv)
 
 	while (ros::ok()) {
 		// Resynchronize by only advancing the lagging camera.
-		if (adv_left)  mon_left.GetFrame(frame_left);
-		if (adv_right) mon_right.GetFrame(frame_right);
+		if (adv_left)  cam_left.GetFrame(frame_left);
+		if (adv_right) cam_right.GetFrame(frame_right);
 		adv_left  = false;
 		adv_right = false;
 
 		// TODO: Synchronize frames using timestamps.
 		int order = comp.Compare(frame_left, frame_right);
+		std::cerr << "order = " << order << std::endl;
 		if (order == 0) {
 			// TODO: Choose the (slightly) higher of the two timestamps.
 			ros::Time time = time_conv.SysToROS(frame_left.GetTimestamp());
@@ -138,10 +142,16 @@ int main(int argc, char **argv)
 			g_info_right.header.stamp    = time;
 			g_info_right.header.frame_id = "stereo/right_link";
 			pub_info_right.publish(g_info_right);
+
+			adv_left  = true;
+			adv_right = true;
+			// std::cerr << "ok: synchronized" << std::endl;
 		} else if (order < 0) {
 			adv_left = true;
+			// std::cerr << "war: dropping left frame" << std::endl;
 		} else if (order > 0) {
 			adv_right = true;
+			// std::cerr << "war: dropping right frame" << std::endl;
 		}
 		ros::spinOnce();
 	}

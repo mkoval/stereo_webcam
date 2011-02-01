@@ -31,14 +31,18 @@ int CameraFrameComparator::Compare(CameraFrame const &x, CameraFrame const &y) c
 	timeval diff   = { 0, 0 };
 
 	// Calculate the magnitude of error between the frames' timestamps.
-	if (timercmp(&time_x, &time_y, >)) {
+	bool x_bigger = timercmp(&time_x, &time_y, >);
+	if (x_bigger) {
 		timersub(&time_x, &time_y, &diff);
-	} else if (timercmp(&time_x, &time_y, <)) {
+	} else {
 		timersub(&time_y, &time_x, &diff);
 	}
 
-	if      (timercmp(&diff, &m_err, <))    { return  0; }
-	else if (timercmp(&time_x, &time_y, <)) { return -1; }
-	else                                    { return +1; }
+	if (timercmp(&diff, &m_err, <))
+		return 0;
+	else if (x_bigger)
+		return +1;
+	else
+		return -1;
 
 }

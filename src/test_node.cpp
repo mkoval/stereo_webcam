@@ -8,7 +8,6 @@
 
 #include "CameraFrame.hpp"
 #include "CameraFrameComparator.hpp"
-#include "CameraMonitor.hpp"
 #include "Webcam.hpp"
 
 static cv::Point  const TEXT_OFFSET(20, 480 - 20);
@@ -30,19 +29,10 @@ int main(int argc, char **argv)
 	std::string const dev_right = argv[2];
 	std::string const prefix    = argv[3];
 	std::string const extension = argv[4];
-	uint32_t const nbuf      = 10;
+	uint32_t const nbuf         = 2;
 
-	Webcam cam_left(dev_left, 1);
-	Webcam cam_right(dev_right, 1);
-
-	CameraFrame frame_left;
-	CameraFrame frame_right;
-
-	// Buffer the frames in user-space for resynchronization.
-	CameraMonitor mon_left(cam_left,   nbuf);
-	CameraMonitor mon_right(cam_right, nbuf);
-	boost::thread thread_left(boost::ref(mon_left));
-	boost::thread thread_right(boost::ref(mon_right));
+	Webcam cam_left(dev_left, nbuf), cam_right(dev_right, nbuf);
+	CameraFrame frame_left, frame_right;
 
 	CameraFrameComparator comp(0.0005);
 
@@ -55,8 +45,8 @@ int main(int argc, char **argv)
 	uint32_t i = 0;
 	for (;;) {
 		// Wait for new frames from the camera(s).
-		if (adv_left)  mon_left.GetFrame(frame_left);
-		if (adv_right) mon_right.GetFrame(frame_right);
+		if (adv_left)  cam_left.GetFrame(frame_left);
+		if (adv_right) cam_right.GetFrame(frame_right);
 		adv_left  = false;
 		adv_right = false;
 
@@ -108,6 +98,7 @@ int main(int argc, char **argv)
 		} else if (order > 0) {
 			state = "LAGR";
 		}
+		std::cerr << state << std::endl;
 		cv::putText(dst, state, cv::Point(width - 100, height - 20), TEXT_FONT,
 		            TEXT_SCALE, TEXT_COLOR, TEXT_WIDTH);
 

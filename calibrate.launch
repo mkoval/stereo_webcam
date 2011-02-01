@@ -1,0 +1,16 @@
+<launch>
+	<group ns="stereo">
+		<node pkg="stereo_webcam" type="stereo_node" name="stereo_driver">
+			<param name="device_left"  value="/dev/video0"/>
+			<param name="device_right" value="/dev/video1"/>
+			<param name="nbuf"      value="10"/>
+			<param name="err_ratio" value="0.5"/>
+		</node>
+		<node pkg="camera_calibration" type="cameracalibrator.py" name="calibrator">
+			<remap from="left"         to="left/image_raw"/>
+			<remap from="right"        to="right/image_raw"/>
+			<remap from="left_camera"  to="left"/>
+			<remap from="right_camera" to="right"/>
+		</node>
+	</group>
+</launch>

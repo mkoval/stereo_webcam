@@ -12,7 +12,6 @@
 
 #include "CameraFrame.hpp"
 #include "CameraFrameComparator.hpp"
-#include "CameraMonitor.hpp"
 #include "TimeConverter.hpp"
 #include "Webcam.hpp"
 

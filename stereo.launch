@@ -1,0 +1,22 @@
+<launch>
+	<group ns="stereo">
+		<node pkg="stereo_webcam" type="stereo_node" name="driver">
+			<param name="device_left" value="/dev/video0"/>
+			<param name="device_right" value="/dev/video1"/>
+			<param name="info_left" value="file:///home/mckoval/calibration_left.yaml"/>
+			<param name="info_right" value="file:///home/mckoval/calibration_right.yaml"/>
+			<param name="err_ratio" value="0.5"/>
+			<param name="nbuf" value="10"/>
+			<remap from="left/image" to="left/image_raw"/>
+			<remap from="right/image" to="right/image_raw"/>
+		</node>
+		<node pkg="stereo_image_proc" type="stereo_image_proc" name="proc"></node>
+	</group>
+	<!--
+	<node pkg="image_view" type="stereo_view" name="view">
+		<remap from="stereo/left/image" to="stereo/left/image_raw"/>
+		<remap from="stereo/right/image" to="stereo/right/image_raw"/>
+	</node>
+	<node pkg="dynamic_reconfigure" type="reconfigure_gui" name="reconfigure"></node>
+	-->
+</launch>

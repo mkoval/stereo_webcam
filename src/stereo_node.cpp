@@ -5,39 +5,21 @@
 #include <boost/thread.hpp>
 
 #include <ros/ros.h>
+#include <camera_info_manager/camera_info_manager.h>
+#include <image_transport/image_transport.h>
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/Image.h>
-#include <sensor_msgs/SetCameraInfo.h>
 
 #include "CameraFrame.hpp"
 #include "CameraFrameComparator.hpp"
 #include "TimeConverter.hpp"
 #include "Webcam.hpp"
 
-
-using sensor_msgs::SetCameraInfo;
 using sensor_msgs::CameraInfo;
 using sensor_msgs::Image;
-
-static CameraInfo g_info_left;
-static CameraInfo g_info_right;
-
-bool set_info_left(SetCameraInfo::Request &req, SetCameraInfo::Response &res)
-{
-	g_info_left = req.camera_info;
-	res.success        = true;
-	res.status_message = "";
-	return true;
-}
-
-bool set_info_right(SetCameraInfo::Request &req, SetCameraInfo::Response &res)
-{
-	g_info_right = req.camera_info;
-	res.success        = true;
-	res.status_message = "";
-	return true;
-}
+using image_transport::CameraPublisher;
+using image_transport::ImageTransport;
 
 Image FrameToImageMsg(CameraFrame const &src)
 {
@@ -61,23 +43,23 @@ int main(int argc, char **argv)
 	ros::init(argc, argv, "stereo_node");
 	ros::NodeHandle nh;
 
-	ros::Publisher pub_left       = nh.advertise<Image>("left/image_raw",  10);
-	ros::Publisher pub_right      = nh.advertise<Image>("right/image_raw", 10);
-	ros::Publisher pub_info_left  = nh.advertise<CameraInfo>("left/camera_info",  10);
-	ros::Publisher pub_info_right = nh.advertise<CameraInfo>("right/camera_info", 10);
-	ros::ServiceServer srv_left   = nh.advertiseService("left/set_camera_info",  set_info_left);
-	ros::ServiceServer srv_right  = nh.advertiseService("right/set_camera_info", set_info_right);
+	ImageTransport it(nh);
+	CameraPublisher pub_left  = it.advertiseCamera("left/image", 1);
+	CameraPublisher pub_right = it.advertiseCamera("right/image", 1);
 
 	// Paths to each of the camera device files.
 	std::string dev_left, dev_right;
+	std::string info_left, info_right;
 	double err_ratio;
 	int    nbuf;
 
 	ros::NodeHandle nh_priv("~");
-	nh_priv.param("device_left",  dev_left,  std::string("/dev/video0"));
-	nh_priv.param("device_right", dev_right, std::string("/dev/video1"));
-	nh_priv.param("buffers",      nbuf,      10);
-	nh_priv.param("error_ratio",  err_ratio, 0.5);
+	nh_priv.param("device_left",  dev_left,   std::string("/dev/video1"));
+	nh_priv.param("device_right", dev_right,  std::string("/dev/video2"));
+	nh_priv.param("info_left",    info_left,  std::string("file:///tmp/calibration_left.yaml"));
+	nh_priv.param("info_right",   info_right, std::string("file:///tmp/calibration_right.yaml"));
+	nh_priv.param("buffers",      nbuf,       10);
+	nh_priv.param("error_ratio",  err_ratio,  0.5);
 	// TODO: Enable use of the error_ratio parameter.
 	// TODO: Allow configuration of other camera parameters.
 
@@ -97,10 +79,14 @@ int main(int argc, char **argv)
 	TimeConverter time_conv(init_sys, init_ros);
 	CameraFrameComparator comp(0.0005);
 
-	CameraFrame frame_left, frame_right;
+	CameraInfoManager caminfo_left(ros::NodeHandle("left"), "left", info_left);
+	CameraInfoManager caminfo_right(ros::NodeHandle("right"), "right", info_right);
 
 	Webcam cam_left(dev_left, nbuf);
 	Webcam cam_right(dev_right, nbuf);
+
+	CameraFrame frame_left;
+	CameraFrame frame_right;
 
 	cam_left.SetStreaming(true);
 	cam_right.SetStreaming(true);
@@ -124,22 +110,22 @@ int main(int argc, char **argv)
 			// Left Camera's Image and CameraInfo
 			Image msg_left = FrameToImageMsg(frame_left);
 			msg_left.header.stamp      = time;
-			msg_left.header.frame_id   = "stereo/left_link";
-			pub_left.publish(msg_left);
+			msg_left.header.frame_id   = "stereo/stereo_link";
 
-			g_info_left.header.stamp     = time;
-			g_info_left.header.frame_id  = "stereo/left_link";
-			pub_info_left.publish(g_info_left);
+			CameraInfo info_l = caminfo_left.getCameraInfo();
+			info_l.header.stamp    = time;
+			info_l.header.frame_id = "stereo/stereo_link";
+			pub_left.publish(msg_left, info_l);
 
 			// Right Camera's Image and CameraInfo
 			Image msg_right = FrameToImageMsg(frame_right);
 			msg_right.header.stamp     = time;
-			msg_right.header.frame_id  = "stereo/right_link";
-			pub_right.publish(msg_right);
+			msg_right.header.frame_id  = "stereo/stereo_link";
 
-			g_info_right.header.stamp    = time;
-			g_info_right.header.frame_id = "stereo/right_link";
-			pub_info_right.publish(g_info_right);
+			CameraInfo info_r = caminfo_right.getCameraInfo();
+			info_r.header.stamp    = time;
+			info_r.header.frame_id = "stereo/stereo_link";
+			pub_right.publish(msg_right, info_r);
 
 			adv_left  = true;
 			adv_right = true;

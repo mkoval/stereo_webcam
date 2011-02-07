@@ -41,6 +41,7 @@ private:
 	};
 
 	int m_fd;
+	size_t m_nbufs;
 	v4l2_streamparm     m_param;
 	v4l2_format         m_fmt_pix;
 	std::vector<Buffer> m_bufs;
@@ -53,10 +54,10 @@ private:
 	Webcam &operator=(Webcam const &src);
 
 	void GetParam(v4l2_streamparm &param);
-	void SetParam(v4l2_streamparm const &param);
+	void SetParam(v4l2_streamparm &param);
 
 	void GetFormat(v4l2_format &fmt);
-	void SetFormat(v4l2_format const &fmt);
+	void SetFormat(v4l2_format &fmt);
 
 	void AllocateBuffer(size_t index);
 	void DeallocateBuffer(size_t index);

@@ -56,44 +56,26 @@ static void yuv422_to_rgb(uint8_t const *src, uint8_t *dst)
 	yuv444_to_rgb(y2, cb, cr, dst + 3);
 }
 
+#include <iostream>
 Webcam::Webcam(std::string file, size_t nbufs)
-	: m_bufs(nbufs)
+	: m_nbufs(nbufs),
+	  m_bufs(nbufs)
 {
-	int ret;
-
 	// Access mode is O_RDWR instead of as specified in the V4L documentation.
 	m_fd = open(file.c_str(), O_RDWR);
-
-	// TODO: Replace the error messages with a custom exception class.
 	if (m_fd == -1) {
 		throw std::invalid_argument("unable to open device");
 	}
 
-	// Request the appropriate number of buffers or mmap IO.
-	v4l2_requestbuffers req_bufs;
-	req_bufs.count  = nbufs;
-	req_bufs.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	req_bufs.memory = V4L2_MEMORY_MMAP;
-	ret = ioctl(m_fd, VIDIOC_REQBUFS, &req_bufs);
-	if (ret == -1 || req_bufs.count < nbufs) {
-		throw std::runtime_error("unable to allocate memory-mapped buffer");
+	// Initialize the buffers to an invalid state.
+	// TODO: Move this to the Webcam::Buffer constructor.
+	for (size_t i = 0; i < nbufs; ++i) {
+		m_bufs[i].len = 0;
+		m_bufs[i].ptr = NULL;
+		m_bufs[i].buf = NULL;
 	}
 
-	// Allocate memory-mapped buffers in the kernel using V4L.
-	size_t i;
-	try {
-		for (i = 0; i < nbufs; ++i) {
-			m_bufs[i].ptr = NULL;
-			AllocateBuffer(i);
-		}
-	} catch (std::runtime_error &err) {
-		for (size_t j = 0; j < i; ++j) {
-			DeallocateBuffer(j);
-		}
-		throw err;
-	}
-
-	// Fetch default configuration data from the camera.
+	// Read the default device parameters for parameter negotiation.
 	GetParam(m_param);
 	GetFormat(m_fmt_pix);
 }
@@ -115,29 +97,60 @@ Webcam::~Webcam(void) {
 }
 
 void Webcam::SetStreaming(bool streaming) {
+	uint32_t type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	int ret;
+	// TODO: Only reallocate buffers if the size has changed.
 
-	// Begin by enqueing all of the buffers since they are dequeued when
-	// streaming halts (and by default)
+	// Allocate and enqueue the buffers necessary for memory-mapped IO.
 	if (streaming) {
+		// Request the appropriate number of buffers or mmap IO.
+		v4l2_requestbuffers req_bufs;
+		req_bufs.count  = m_nbufs;
+		req_bufs.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		req_bufs.memory = V4L2_MEMORY_MMAP;
+		ret = ioctl(m_fd, VIDIOC_REQBUFS, &req_bufs);
+		if (ret == -1 || req_bufs.count < m_nbufs) {
+			throw std::runtime_error("unable to allocate memory-mapped buffer");
+		}
+
+		// Allocate memory-mapped buffers in the kernel using V4L.
+		size_t i;
+		try {
+			for (i = 0; i < m_nbufs; ++i) {
+				m_bufs[i].ptr = NULL;
+				AllocateBuffer(i);
+			}
+		} catch (std::runtime_error &err) {
+			for (size_t j = 0; j < i; ++j) {
+				DeallocateBuffer(j);
+			}
+			throw err;
+		}
+
+		// Enqueue the freshly allocated buffers.
 		for (size_t i = 0; i < m_bufs.size(); ++i) {
 			ret = ioctl(m_fd, VIDIOC_QBUF, m_bufs[i].buf);
 			if (ret == -1) {
 				throw std::runtime_error("unable to enqueue empty buffer");
 			}
 		}
-	}
 
-	// Disabling streaming automatically clears the queue.
-	uint32_t type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	if (streaming) {
 		ret = ioctl(m_fd, VIDIOC_STREAMON, &type);
-	} else {
-		ret = ioctl(m_fd, VIDIOC_STREAMOFF, &type);
+		if (ret == -1) {
+			throw std::runtime_error("unable to enable streaming");
+		}
 	}
+	// Dequeue (automatic) and deallocate the buffers.
+	else {
+		ret = ioctl(m_fd, VIDIOC_STREAMOFF, &type);
+		if (ret == -1) {
+			throw std::runtime_error("unable to disable streaming");
+		}
 
-	if (ret == -1) {
-		throw std::runtime_error("unable to change stream state");
+		// Deallocate the buffers.
+		for (size_t i = 0; i < m_bufs.size(); ++i) {
+			DeallocateBuffer(i);
+		}
 	}
 }
 
@@ -207,9 +220,10 @@ uint32_t Webcam::GetHeight(void) const {
 }
 
 void Webcam::SetResolution(uint32_t width, uint32_t height) {
+	// TODO: Disable this function while streaming is enabled.
+
 	m_fmt_pix.fmt.pix.width  = width;
 	m_fmt_pix.fmt.pix.height = height;
-
 	SetFormat(m_fmt_pix);
 
 	if (m_fmt_pix.fmt.pix.width != width || m_fmt_pix.fmt.pix.height != height) {
@@ -231,7 +245,7 @@ void Webcam::GetParam(v4l2_streamparm &param) {
 	}
 }
 
-void Webcam::SetParam(v4l2_streamparm const &param) {
+void Webcam::SetParam(v4l2_streamparm &param) {
 	int ret = ioctl(m_fd, VIDIOC_S_PARM, &param);
 
 	if (ret == -1) {
@@ -246,16 +260,20 @@ void Webcam::GetFormat(v4l2_format &fmt) {
 	if (ret == -1) {
 		throw std::runtime_error("unable to fetch image format");
 	}
+
+	std::cout << "get format" << std::endl;
 }
 
-void Webcam::SetFormat(v4l2_format const &fmt) {
+void Webcam::SetFormat(v4l2_format &fmt) {
 	int ret;
 
+	std::cout << "neg format" << std::endl;
 	ret = ioctl(m_fd, VIDIOC_S_FMT, &fmt);
 	if (ret == -1) {
 		throw std::runtime_error("unable to negotiate image format");
 	}
 
+	std::cout << "set format" << std::endl;
 	ret = ioctl(m_fd, VIDIOC_S_FMT, &fmt);
 	if (ret == -1) {
 		throw std::runtime_error("unable to change image format");
@@ -384,5 +402,7 @@ void Webcam::DeallocateBuffer(size_t index)
 
 	delete m_bufs[index].buf;
 	munmap(m_bufs[index].ptr, m_bufs[index].len);
+	m_bufs[index].len = 0;
+	m_bufs[index].buf = NULL;
 	m_bufs[index].ptr = NULL;
 }

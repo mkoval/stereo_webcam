@@ -54,8 +54,8 @@ int main(int argc, char **argv)
 	int nbuf, fps;
 
 	ros::NodeHandle nh_priv("~");
-	nh_priv.param("device_left",  dev_left,   std::string("/dev/video1"));
-	nh_priv.param("device_right", dev_right,  std::string("/dev/video2"));
+	nh_priv.param("device_left",  dev_left,   std::string("/dev/video_left"));
+	nh_priv.param("device_right", dev_right,  std::string("/dev/video_right"));
 	nh_priv.param("info_left",    info_left,  std::string("file:///tmp/calibration_left.yaml"));
 	nh_priv.param("info_right",   info_right, std::string("file:///tmp/calibration_right.yaml"));
 	nh_priv.param("width",        res_width,  640);

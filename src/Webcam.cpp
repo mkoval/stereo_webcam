@@ -94,6 +94,7 @@ Webcam::~Webcam(void) {
 	for (size_t i = 0; i < m_bufs.size(); ++i) {
 		DeallocateBuffer(i);
 	}
+	close(m_fd);
 }
 
 void Webcam::SetStreaming(bool streaming) {

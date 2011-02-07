@@ -18,11 +18,11 @@
 
 #include <linux/videodev2.h>
 
-static int clamp (double r)
+static int clamp(double x)
 {
-	if (r < 0)
+	if (x < 0)
 		return 0;
-	else if (r > 250)
+	else if (x > 250)
 		return 255;
 	else
 		return x;
@@ -31,9 +31,6 @@ static int clamp (double r)
 #define Y_ADJ(y1) ((255 / 219.0) * (y1 - 16))
 static void yuv444_to_rgb(uint8_t Y1, uint8_t Cb, uint8_t Cr, uint8_t *dst)
 {
-	double r, g, b;
-	double pb, pr;
-
 	double pb = Cb - 128;
 	double pr = Cr - 128;
 

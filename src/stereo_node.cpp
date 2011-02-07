@@ -21,7 +21,7 @@ using sensor_msgs::Image;
 using image_transport::CameraPublisher;
 using image_transport::ImageTransport;
 
-Image FrameToImageMsg(CameraFrame const &src)
+static Image FrameToImageMsg(CameraFrame const &src)
 {
 	Image msg;
 	msg.width    = src.GetWidth();
@@ -50,24 +50,44 @@ int main(int argc, char **argv)
 	// Paths to each of the camera device files.
 	std::string dev_left, dev_right;
 	std::string info_left, info_right;
-	double err_ratio;
-	int    nbuf;
+	int res_width, res_height;
+	int nbuf, fps;
 
 	ros::NodeHandle nh_priv("~");
 	nh_priv.param("device_left",  dev_left,   std::string("/dev/video1"));
 	nh_priv.param("device_right", dev_right,  std::string("/dev/video2"));
 	nh_priv.param("info_left",    info_left,  std::string("file:///tmp/calibration_left.yaml"));
 	nh_priv.param("info_right",   info_right, std::string("file:///tmp/calibration_right.yaml"));
+	nh_priv.param("width",        res_width,  640);
+	nh_priv.param("height",       res_height, 480);
+	nh_priv.param("fps",          fps,        30);
 	nh_priv.param("buffers",      nbuf,       10);
-	nh_priv.param("error_ratio",  err_ratio,  0.5);
 	// TODO: Enable use of the error_ratio parameter.
 	// TODO: Allow configuration of other camera parameters.
 
-	if (nbuf < 1) {
-		ROS_ERROR("number of kernel buffers must be non-negative");
+	if (nbuf < 2) {
+		ROS_ERROR("need two buffers or more buffers for synchronization");
 		return 1;
-	} else if (nbuf == 1) {
-		ROS_WARN("must use at least two buffers for synchronization to succeed");
+	}
+
+	// Negotiate resolution and framerate.
+	Webcam cam_left(dev_left, nbuf);
+	Webcam cam_right(dev_right, nbuf);
+
+	try {
+		cam_left.SetResolution(res_width, res_height);
+		cam_right.SetResolution(res_width, res_height);
+	} catch (std::invalid_argument const &e) {
+		std::cerr << "err: unable to negotiate resolution" << std::endl;
+		return 1;
+	}
+
+	try {
+		cam_left.SetFPS(fps);
+		cam_right.SetFPS(fps);
+	} catch (std::invalid_argument const &e) {
+		std::cerr << "err: framerate is unsupported at this resolution" << std::endl;
+		return 1;
 	}
 
 	// Convert between system timestamps and ROS timestamps using a single pair
@@ -76,14 +96,12 @@ int main(int argc, char **argv)
 	timeval   init_sys;
 	gettimeofday(&init_sys, NULL);
 
+	// TODO: Dynamically select this threshold using the FPS.
 	TimeConverter time_conv(init_sys, init_ros);
 	CameraFrameComparator comp(0.0005);
 
 	CameraInfoManager caminfo_left(ros::NodeHandle("left"), "left", info_left);
 	CameraInfoManager caminfo_right(ros::NodeHandle("right"), "right", info_right);
-
-	Webcam cam_left(dev_left, nbuf);
-	Webcam cam_right(dev_right, nbuf);
 
 	CameraFrame frame_left;
 	CameraFrame frame_right;

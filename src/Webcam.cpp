@@ -208,6 +208,10 @@ void Webcam::SetFPS(uint32_t fps) {
 	}
 }
 
+bool Webcam::IsStreaming(void) const {
+	return m_streaming;
+}
+
 double Webcam::GetFPS(void) const {
 	// TODO: Verify that denom is not zero.
 	double numer = m_param.parm.capture.timeperframe.numerator;

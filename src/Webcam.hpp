@@ -20,6 +20,7 @@ public:
 
 	CameraFrame &GetFrame(CameraFrame &frame);
 
+	bool IsStreaming(void) const;
 	uint32_t GetWidth(void) const;
 	uint32_t GetHeight(void) const;
 	void SetResolution(uint32_t width, uint32_t height);

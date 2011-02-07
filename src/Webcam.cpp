@@ -18,36 +18,36 @@
 
 #include <linux/videodev2.h>
 
-static int clamp (double x)
+static int clamp (double r)
 {
-	int r = x;      /* round to nearest */
-
-	if (r < 0)         return 0;
-	else if (r > 255)  return 255;
-	else               return r;
+	if (r < 0)
+		return 0;
+	else if (r > 250)
+		return 255;
+	else
+		return x;
 }
 
-
-#define C_ADJ (255 / 122.0)
 #define Y_ADJ(y1) ((255 / 219.0) * (y1 - 16))
 static void yuv444_to_rgb(uint8_t Y1, uint8_t Cb, uint8_t Cr, uint8_t *dst)
 {
-	double r, g, b;         /* temporaries */
+	double r, g, b;
 	double pb, pr;
 
-	pb = (Cb - 128);
-	pr = (Cr - 128);
+	double pb = Cb - 128;
+	double pr = Cr - 128;
 
-	r = Y_ADJ(Y1) +              255/112.0 * 0.701 * pr;
-	g = Y_ADJ(Y1) - 255/112.0 * 0.886 * 0.114/0.587 * pb - 255/112.0*0.701 * 0.299/0.587 * pr;
-	b = Y_ADJ(Y1) + 255/112.0 * 0.886 * pb;
+	double r = Y_ADJ(Y1) + 255/112.0 * 0.701 * pr;
+	double g = Y_ADJ(Y1) - 255/112.0 * 0.886 * 0.114/0.587 * pb
+	                     - 255/112.0 * 0.701 * 0.299/0.587 * pr;
+	double b = Y_ADJ(Y1) + 255/112.0 * 0.886 * pb;
 
-	dst[2] = clamp (r ); /* [ok? one should prob. limit y1,pb,pr] */
-	dst[1] = clamp (g );
-	dst[0] = clamp (b );
+	dst[0] = clamp(b);
+	dst[1] = clamp(g);
+	dst[2] = clamp(r);
 }
 
-/* consume 6 bytes of dst and 4 bytes of src */
+// Consumes 6 bytes of dst and 4 bytes of src.
 static void yuv422_to_rgb(uint8_t const *src, uint8_t *dst)
 {
 	int8_t y1 = src[0];
@@ -55,8 +55,7 @@ static void yuv422_to_rgb(uint8_t const *src, uint8_t *dst)
 	int8_t y2 = src[2];
 	int8_t cr = src[3];
 
-
-	yuv444_to_rgb(y1, cb, cr, dst);
+	yuv444_to_rgb(y1, cb, cr, dst + 0);
 	yuv444_to_rgb(y2, cb, cr, dst + 3);
 }
 

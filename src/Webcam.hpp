@@ -40,7 +40,8 @@ private:
 		v4l2_buffer *buf;
 	};
 
-	int m_fd;
+	int    m_fd;
+	bool   m_streaming;
 	size_t m_nbufs;
 	v4l2_streamparm     m_param;
 	v4l2_format         m_fmt_pix;

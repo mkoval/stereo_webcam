@@ -56,9 +56,9 @@ static void yuv422_to_rgb(uint8_t const *src, uint8_t *dst)
 	yuv444_to_rgb(y2, cb, cr, dst + 3);
 }
 
-#include <iostream>
 Webcam::Webcam(std::string file, size_t nbufs)
-	: m_nbufs(nbufs),
+	: m_streaming(false),
+	  m_nbufs(nbufs),
 	  m_bufs(nbufs)
 {
 	// Access mode is O_RDWR instead of as specified in the V4L documentation.
@@ -99,6 +99,9 @@ Webcam::~Webcam(void) {
 void Webcam::SetStreaming(bool streaming) {
 	uint32_t type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	int ret;
+
+	m_streaming = streaming;
+
 	// TODO: Only reallocate buffers if the size has changed.
 
 	// Allocate and enqueue the buffers necessary for memory-mapped IO.
@@ -220,6 +223,9 @@ uint32_t Webcam::GetHeight(void) const {
 }
 
 void Webcam::SetResolution(uint32_t width, uint32_t height) {
+	if (m_streaming) {
+		throw std::runtime_error("must disable streaming to change resolution");
+	}
 	// TODO: Disable this function while streaming is enabled.
 
 	m_fmt_pix.fmt.pix.width  = width;
@@ -260,20 +266,16 @@ void Webcam::GetFormat(v4l2_format &fmt) {
 	if (ret == -1) {
 		throw std::runtime_error("unable to fetch image format");
 	}
-
-	std::cout << "get format" << std::endl;
 }
 
 void Webcam::SetFormat(v4l2_format &fmt) {
 	int ret;
 
-	std::cout << "neg format" << std::endl;
 	ret = ioctl(m_fd, VIDIOC_S_FMT, &fmt);
 	if (ret == -1) {
 		throw std::runtime_error("unable to negotiate image format");
 	}
 
-	std::cout << "set format" << std::endl;
 	ret = ioctl(m_fd, VIDIOC_S_FMT, &fmt);
 	if (ret == -1) {
 		throw std::runtime_error("unable to change image format");

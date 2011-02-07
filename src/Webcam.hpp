@@ -13,22 +13,6 @@
 
 class Webcam {
 public:
-	Webcam(std::string file, size_t nbufs);
-	~Webcam(void);
-
-	void SetStreaming(bool streaming);
-
-	CameraFrame &GetFrame(CameraFrame &frame);
-
-	bool IsStreaming(void) const;
-	uint32_t GetWidth(void) const;
-	uint32_t GetHeight(void) const;
-	void SetResolution(uint32_t width, uint32_t height);
-
-	double GetFPS(void) const;
-	void SetFPS(uint32_t fps);
-
-private:
 	struct Resolution {
 		uint32_t width;
 		uint32_t height;
@@ -40,16 +24,33 @@ private:
 		v4l2_buffer *buf;
 	};
 
+	Webcam(std::string file, size_t nbufs);
+	~Webcam(void);
+
+	bool IsStreaming(void) const;
+	void SetStreaming(bool streaming);
+
+	double GetFPS(void) const;
+	void SetFPS(uint32_t fps);
+
+	uint32_t GetWidth(void) const;
+	uint32_t GetHeight(void) const;
+	void SetResolution(uint32_t width, uint32_t height);
+
+	CameraFrame &GetFrame(CameraFrame &frame);
+
+	std::list<std::string> GetControls(void) const;
+	std::list<uint32_t>    GetPixelFormats(void) const;
+	std::list<Resolution>  GetResolutions(uint32_t pixel_format) const;
+	std::list<double>      GetFPSs(uint32_t pixel_format, Resolution res) const;
+
+private:
 	int    m_fd;
 	bool   m_streaming;
 	size_t m_nbufs;
 	v4l2_streamparm     m_param;
 	v4l2_format         m_fmt_pix;
 	std::vector<Buffer> m_bufs;
-
-	std::list<uint32_t>   GetPixelFormats(void) const;
-	std::list<Resolution> GetResolutions(uint32_t pixel_format) const;
-	std::list<double>     GetFPSs(uint32_t pixel_format, Resolution res) const;
 
 	Webcam(Webcam const &src);
 	Webcam &operator=(Webcam const &src);

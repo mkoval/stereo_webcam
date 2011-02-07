@@ -267,7 +267,6 @@ void Webcam::GetFormat(v4l2_format &fmt) {
 		throw std::runtime_error("unable to fetch image format");
 	}
 }
-
 void Webcam::SetFormat(v4l2_format &fmt) {
 	int ret;
 
@@ -280,6 +279,34 @@ void Webcam::SetFormat(v4l2_format &fmt) {
 	if (ret == -1) {
 		throw std::runtime_error("unable to change image format");
 	}
+}
+
+std::list<std::string> Webcam::GetControls(void) const {
+	int ret;
+
+	std::list<std::string> controls;
+	v4l2_queryctrl query;
+
+	for (query.id = V4L2_CID_BASE; ; ++query.id) {
+		ret = ioctl(m_fd, VIDIOC_QUERYCTRL, &query);
+
+		if (!ret) {
+			controls.push_back((char *) query.name);
+		} else {
+			break;
+		}
+	}
+
+	for (query.id = V4L2_CID_PRIVATE_BASE; ; ++query.id) {
+		ret = ioctl(m_fd, VIDIOC_QUERYCTRL, &query);
+
+		if (!ret) {
+			controls.push_back((char *) query.name);
+		} else {
+			break;
+		}
+	}
+	return controls;
 }
 
 std::list<uint32_t> Webcam::GetPixelFormats(void) const {

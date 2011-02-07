@@ -19,7 +19,6 @@ public:
 	void SetStreaming(bool streaming);
 
 	CameraFrame &GetFrame(CameraFrame &frame);
-	void WaitForFrame(int to_ms) const;
 
 	uint32_t GetWidth(void) const;
 	uint32_t GetHeight(void) const;

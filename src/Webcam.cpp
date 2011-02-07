@@ -238,11 +238,6 @@ void Webcam::SetResolution(uint32_t width, uint32_t height) {
 	}
 }
 
-void Webcam::WaitForFrame(int to_ms) const {
-	struct pollfd fds = { m_fd, POLLIN };
-	poll(&fds, 1, to_ms);
-}
-
 void Webcam::GetParam(v4l2_streamparm &param) {
 	param.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	int ret = ioctl(m_fd, VIDIOC_G_PARM, &param);

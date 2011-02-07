@@ -77,7 +77,7 @@ int main(int argc, char **argv)
 	try {
 		cam_left.SetResolution(res_width, res_height);
 		cam_right.SetResolution(res_width, res_height);
-	} catch (std::invalid_argument const &e) {
+	} catch (std::runtime_error const &e) {
 		std::cerr << "err: unable to negotiate resolution" << std::endl;
 		return 1;
 	}

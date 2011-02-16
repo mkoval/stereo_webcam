@@ -1,20 +1,20 @@
 <launch>
 	<group ns="stereo">
 		<node pkg="stereo_webcam" type="stereo_node" name="stereo_driver">
-			<param name="device_left" value="/dev/video0"/>
-			<param name="device_right" value="/dev/video1"/>
-			<param name="info_left" value="file:///home/mckoval/calibration_left.yaml"/>
-			<param name="info_right" value="file:///home/mckoval/calibration_right.yaml"/>
-			<param name="err_ratio" value="0.5"/>
+			<param name="device_left" value="/dev/video_left"/>
+			<param name="device_right" value="/dev/video_right"/>
+			<param name="info_left" value="file:///home/mckoval/calibration_320x240_left.yaml"/>
+			<param name="info_right" value="file:///home/mckoval/calibration_320x240_right.yaml"/>
+			<param name="width" value="320"/>
+			<param name="height" value="240"/>
 			<param name="nbuf" value="10"/>
+			<param name="fps" value="10"/>
 		</node>
-		<node pkg="camera_calibration" type="cameracalibrator.py" name="calibrator">
-			<remap from="left" to="left/image_raw"/>
-			<remap from="right" to="right/image_raw"/>
+		<node pkg="camera_calibration" type="cameracalibrator.py" name="calibrator" args="--size=7x5 --square=0.127">
+			<remap from="left" to="left/image"/>
+			<remap from="right" to="right/image"/>
 			<remap from="left_camera" to="left"/>
 			<remap from="right_camera" to="right"/>
-			<param name="size" value="8x6"/>
-			<param name="square" value="0.02875"/>
 		</node>
 	</group>
 </launch>

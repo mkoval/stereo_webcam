@@ -26,7 +26,8 @@ static double const def_threshold = 0.005;
 static int const def_width   = 640;
 static int const def_height  = 480;
 static int const def_fps     = 30;
-static int const def_buffers = 10;
+static int const def_buffers = 2;
+static int const def_cameras = 1;
 
 static Image FrameToImageMsg(CameraFrame const &src)
 {
@@ -49,116 +50,117 @@ int main(int argc, char **argv)
 {
 	ros::init(argc, argv, "stereo_node");
 
-	ros::NodeHandle nh;
-	ros::NodeHandle nh_priv("~");
-	ros::NodeHandle nh_left("left");
-	ros::NodeHandle nh_right("right");
-
+	ros::NodeHandle nh, nh_priv("~");
 	ImageTransport it(nh);
-	CameraPublisher pub_left  = it.advertiseCamera("left/image", 1);
-	CameraPublisher pub_right = it.advertiseCamera("right/image", 1);
-
-	// Static parameters that are fixed during runtime.
-	std::string dev_left,  dev_right;
-	std::string file_left, file_right;
-	int width, height, fps, buffers;
-	double threshold;
-
-	nh_priv.param("device_left",  dev_left,   def_dev_left);
-	nh_priv.param("device_right", dev_right,  def_dev_right);
-	nh_priv.param("info_left",    file_left,  def_file_left);
-	nh_priv.param("info_right",   file_right, def_file_right);
-	nh_priv.param("width",        width,      def_width);
-	nh_priv.param("height",       height,     def_height);
-	nh_priv.param("fps",          fps,        def_fps);
-	nh_priv.param("buffers",      buffers,    def_buffers);
-	nh_priv.param("threshold",    threshold,  def_threshold);
-
-	if (buffers < 2) {
-		ROS_ERROR("need two buffers or more buffers for synchronization");
-		return 1;
-	}
-
-	// Negotiate resolution and framerate.
-	Webcam cam_left(dev_left, buffers);
-	Webcam cam_right(dev_right, buffers);
-
-	try {
-		cam_left.SetResolution(width, height);
-		cam_right.SetResolution(width, height);
-	} catch (std::runtime_error const &e) {
-		ROS_ERROR("resolution is not supported");
-		return 1;
-	}
-
-	try {
-		cam_left.SetFPS(fps);
-		cam_right.SetFPS(fps);
-	} catch (std::invalid_argument const &e) {
-		ROS_ERROR("framerate is not supported at this resolution");
-		return 1;
-	}
 
 	// Convert between system timestamps and ROS timestamps using a single pair
 	// of corresonding times.
 	ros::Time init_ros = ros::Time::now();
 	timeval   init_sys;
 	gettimeofday(&init_sys, NULL);
+	TimeConverter time_conv(init_sys, init_ros);
+
+	// Resolution and FPS are shared across all of the cameras.
+	int width, height, fps;
+	int buffers, cameras;
+	double threshold;
+	nh_priv.param("width",     width,     def_width);
+	nh_priv.param("height",    height,    def_height);
+	nh_priv.param("fps",       fps,       def_fps);
+	nh_priv.param("buffers",   buffers,   def_buffers);
+	nh_priv.param("cameras",   cameras,   def_cameras);
+	nh_priv.param("threshold", threshold, def_threshold);
+
+	// Load camera device names and calibration parameters per camera.
+	// XXX: Use a smart pointer type to avoid memory leaks.
+	std::vector<CameraPublisher>     pub(cameras);
+	std::vector<CameraInfoManager *> caminfo(cameras);
+	std::vector<Webcam *>            cam(cameras);
+
+	for (int i = 0; i < cameras; ++i) {
+		std::stringstream ss;
+		std::string id, path, info;
+
+		ss << i;
+		id = ss.str();
+
+		// Path to the camera's device file and calibration parameters.
+		// XXX: Find a more elegant way of doing this using lists or dicts.
+		nh_priv.getParam("camera" + id, path);
+		nh_priv.getParam("calurl" + id, info);
+
+		ros::NodeHandle nh_cam("camera" + id);
+		pub[i]     = it.advertiseCamera("camera" + id, 1);
+		cam[i]     = new Webcam(path, buffers);
+		caminfo[i] = new CameraInfoManager(nh_cam, "camera" + id, path);
+
+		// Negotiate the resolution, failing if not supported.
+		try {
+			cam[i]->SetResolution(width, height);
+			cam[i]->SetFPS(fps);
+			cam[i]->SetStreaming(true);
+		} catch (std::runtime_error const &e) {
+			ROS_ERROR("resolution is not supported");
+			return 1;
+		} catch (std::invalid_argument const &e) {
+			ROS_ERROR("fps is not supported at this resolution");
+			return 1;
+		}
+	}
 
 	// TODO: Dynamically select this threshold using the FPS.
-	TimeConverter time_conv(init_sys, init_ros);
-	CameraFrameComparator comp(0.0005);
-
-	CameraFrame frame_left, frame_right;
-	CameraInfoManager caminfo_left(nh_left, "left", file_left);
-	CameraInfoManager caminfo_right(nh_right, "right", file_right);
-
-	cam_left.SetStreaming(true);
-	cam_right.SetStreaming(true);
-
-	bool adv_left  = true;
-	bool adv_right = true;
+	CameraFrameComparator    comp(0.0005);
+	std::vector<CameraFrame> frames(cameras);
+	std::vector<bool>        advance(cameras, true);
 
 	while (ros::ok()) {
-		// Resynchronize by only advancing the lagging camera.
-		if (adv_left)  cam_left.GetFrame(frame_left);
-		if (adv_right) cam_right.GetFrame(frame_right);
-		adv_left  = false;
-		adv_right = false;
+		bool sync = true;
 
-		// TODO: Synchronize frames using timestamps.
-		int order = comp.Compare(frame_left, frame_right);
-		if (order == 0) {
-			// TODO: Choose the (slightly) higher of the two timestamps.
-			ros::Time time = time_conv.SysToROS(frame_left.GetTimestamp());
-
-			// Pair each image with its calibration data.
-			CameraInfo info_left  = caminfo_left.getCameraInfo();
-			CameraInfo info_right = caminfo_right.getCameraInfo();
-
-			Image msg_left = FrameToImageMsg(frame_left);
-			msg_left.header.stamp      = time;
-			msg_left.header.frame_id   = "stereo_link";
-			info_left.header.stamp     = time;
-			info_left.header.frame_id  = "stereo_link";
-			pub_left.publish(msg_left, info_left);
-
-			Image msg_right = FrameToImageMsg(frame_right);
-			msg_right.header.stamp     = time;
-			msg_right.header.frame_id  = "stereo_link";
-			info_right.header.stamp    = time;
-			info_right.header.frame_id = "stereo_link";
-			pub_right.publish(msg_right, info_right);
-
-			adv_left  = true;
-			adv_right = true;
-		} else if (order < 0) {
-			adv_left = true;
-			ROS_WARN("desynchronized; dropping left frame");
-		} else if (order > 0) {
-			adv_right = true;
-			ROS_WARN("desynchronized; dropping right frame");
+		// Resynchronize frames by advancing lagging cameras.
+		for (int i = 0; i < cameras; ++i) {
+			if (advance[i]) {
+				cam[i]->GetFrame(frames[i]);
+			}
+			advance[i] = false;
 		}
+
+		// Select the most recent frame of all cameras.
+		size_t newest = 0;
+		for (int i = 1; i < cameras; ++i) {
+			int order = comp.Compare(frames[i], frames[newest]);
+			if (order > 0)
+				newest = i;
+		}
+
+		// Advance all cameras that are lagging the most recent frame.
+		for (int i = 0; i < cameras; ++i) {
+			int order = comp.Compare(frames[i], frames[newest]);
+			if (order < 0) {
+				advance[i] = true;
+				sync       = false;
+			}
+		}
+
+		// Publish all of the Image and CameraInfo messages using with the same
+		// timestamp to be matched with a TimeSynchronizer.
+		if (sync) {
+			ros::Time time = time_conv.SysToROS(frames[0].GetTimestamp());
+
+			for (int i = 0; i < cameras; ++i) {
+				CameraInfo info  = caminfo[i]->getCameraInfo();
+				Image      image = FrameToImageMsg(frames[i]);
+
+				// TODO: Allow the user to specify frame_id with rosparams.
+				image.header.stamp    = time;
+				info.header.stamp     = time;
+				image.header.frame_id = "stereo_link";
+				info.header.frame_id  = "stereo_link";
+				pub[i].publish(image, info);
+			}
+		} else {
+			ROS_WARN("desynchronization detected, dropping frame");
+		}
+
 		ros::spinOnce();
 	}
 	return 0;

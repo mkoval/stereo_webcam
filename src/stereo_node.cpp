@@ -51,7 +51,6 @@ int main(int argc, char **argv)
 	ros::init(argc, argv, "stereo_node");
 
 	ros::NodeHandle nh, nh_priv("~");
-	ImageTransport it(nh);
 
 	// Convert between system timestamps and ROS timestamps using a single pair
 	// of corresonding times.
@@ -90,9 +89,10 @@ int main(int argc, char **argv)
 		nh_priv.getParam("calurl" + id, info);
 
 		ros::NodeHandle nh_cam("camera" + id);
-		pub[i]     = it.advertiseCamera("camera" + id, 1);
+		ImageTransport  it(nh_cam);
+		pub[i]     = it.advertiseCamera("image", 1);
 		cam[i]     = new Webcam(path, buffers);
-		caminfo[i] = new CameraInfoManager(nh_cam, "camera" + id, path);
+		caminfo[i] = new CameraInfoManager(nh_cam, "", info);
 
 		// Negotiate the resolution, failing if not supported.
 		try {

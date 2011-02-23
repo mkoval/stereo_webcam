@@ -94,6 +94,10 @@ int main(int argc, char **argv)
 		cam[i]     = new Webcam(path, buffers);
 		caminfo[i] = new CameraInfoManager(nh_cam, "", info);
 
+		if (!caminfo[i]->isCalibrated()) {
+			ROS_WARN("camera %d is not calibrated", i);
+		}
+
 		// Negotiate the resolution, failing if not supported.
 		try {
 			cam[i]->SetResolution(width, height);
@@ -138,6 +142,7 @@ int main(int argc, char **argv)
 			if (order < 0) {
 				advance[i] = true;
 				sync       = false;
+				ROS_WARN("dropping frame from camera %d", i);
 			}
 		}
 
@@ -156,11 +161,13 @@ int main(int argc, char **argv)
 				image.header.frame_id = "stereo_link";
 				info.header.frame_id  = "stereo_link";
 				pub[i].publish(image, info);
-			}
-		} else {
-			ROS_WARN("desynchronization detected, dropping frame");
-		}
 
+				// No camera is lagging; advance all frames equally.
+				for (int i = 0; i < cameras; ++i) {
+					advance[i] = true;
+				}
+			}
+		}
 		ros::spinOnce();
 	}
 	return 0;

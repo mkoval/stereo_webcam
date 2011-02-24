@@ -85,8 +85,13 @@ int main(int argc, char **argv)
 
 		// Path to the camera's device file and calibration parameters.
 		// XXX: Find a more elegant way of doing this using lists or dicts.
-		nh_priv.getParam("camera" + id, path);
-		nh_priv.getParam("calurl" + id, info);
+		bool ok = nh_priv.getParam("device" + id, path);
+		nh_priv.getParam("params" + id, info);
+
+		if (ok) {
+			ROS_ERROR("missing device path for camera %d", i);
+			return 1;
+		}
 
 		ros::NodeHandle nh_cam("camera" + id);
 		ImageTransport  it(nh_cam);

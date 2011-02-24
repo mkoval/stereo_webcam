@@ -18,10 +18,6 @@ using sensor_msgs::Image;
 using image_transport::CameraPublisher;
 using image_transport::ImageTransport;
 
-static std::string const def_dev_left   = "/dev/video_left";
-static std::string const def_dev_right  = "/dev/video_right";
-static std::string const def_file_left  = "calibration_left.yaml";
-static std::string const def_file_right = "calibration_right.yaml";
 static double const def_threshold = 0.005;
 static int const def_width   = 640;
 static int const def_height  = 480;
@@ -88,7 +84,7 @@ int main(int argc, char **argv)
 		bool ok = nh_priv.getParam("device" + id, path);
 		nh_priv.getParam("params" + id, info);
 
-		if (ok) {
+		if (!ok) {
 			ROS_ERROR("missing device path for camera %d", i);
 			return 1;
 		}
@@ -96,8 +92,14 @@ int main(int argc, char **argv)
 		ros::NodeHandle nh_cam("camera" + id);
 		ImageTransport  it(nh_cam);
 		pub[i]     = it.advertiseCamera("image", 1);
-		cam[i]     = new Webcam(path, buffers);
 		caminfo[i] = new CameraInfoManager(nh_cam, "", info);
+
+		try {
+			cam[i] = new Webcam(path, buffers);
+		} catch (std::invalid_argument const &e) {
+			ROS_ERROR("unable to open '%s'", path.c_str());
+			return 1;
+		}
 
 		if (!caminfo[i]->isCalibrated()) {
 			ROS_WARN("camera %d is not calibrated", i);

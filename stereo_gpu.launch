@@ -1,18 +1,7 @@
 <launch>
 	<group ns="stereo">
-		<node pkg="stereo_webcam" type="stereo_node" name="driver">
-			<param name="device_left" value="/dev/video_left"/>
-			<param name="device_right" value="/dev/video_right"/>
-			<param name="info_left" value="file:///home/mckoval/calibration_320x240_left.yaml"/>
-			<param name="info_right" value="file:///home/mckoval/calibration_320x240_right.yaml"/>
-			<param name="width" value="320"/>
-			<param name="height" value="240"/>
-			<param name="nbuf" value="10"/>
-			<param name="fps" value="10"/>
-			<remap from="left/image" to="left/image_raw"/>
-			<remap from="right/image" to="right/image_raw"/>
-		</node>
-		<node pkg="stereo_image_proc_gpu" type="stereo_image_proc" name="proc"></node>
+		<include file="driver.launch"/>
+		<node pkg="stereo_image_proc_gpu" type="stereo_image_proc" name="proc"/>
 	</group>
 	<node pkg="image_view" type="stereo_view" name="disparity_view">
 		<remap from="image" to="image_color"/>

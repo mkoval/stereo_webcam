@@ -1,7 +1,7 @@
 <launch>
 	<group ns="stereo">
 		<include file="driver.launch"/>
-		<node pkg="stereo_image_proc_gpu" type="stereo_image_proc" name="proc"/>
+		<node pkg="stereo_image_proc_gpu" type="stereo_image_proc_gpu" name="proc"/>
 	</group>
 	<node pkg="image_view" type="stereo_view" name="disparity_view">
 		<remap from="image" to="image_color"/>

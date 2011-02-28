@@ -1,0 +1,18 @@
+<launch>
+  <node pkg="uvc_camera" type="stereo_node" name="uvc_camera_stereo">
+    <param name="width" type="int" value="320" />
+    <param name="height" type="int" value="240" />
+    <param name="fps" type="int" value="30" />
+    <param name="frame" type="string" value="wide_stereo" />
+    <param name="left/device" type="string" value="/dev/video_left" />
+    <param name="right/device" type="string" value="/dev/video_right" />
+  </node>
+  <node pkg="stereo_webcam" type="test_node.py" name="test_stereo">
+    <param name="cameras" value="2"/>
+	<remap from="camera0/image_raw" to="left/image_raw"/>
+    <remap from="camera1/image_raw" to="right/image_raw"/>
+  </node>
+  <node pkg="image_view" type="image_view" name="view">
+    <remap from="image" to="image_sync"/>
+  </node>
+</launch>

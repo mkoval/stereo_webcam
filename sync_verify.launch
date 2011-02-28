@@ -1,9 +1,10 @@
 <launch>
-	<include file="driver.launch"/>
+	<include file="driver3.launch"/>
 	<node pkg="stereo_webcam" type="test_node.py" name="sync_test">
-		<param name="cameras" value="2"/>
+		<param name="cameras" value="3"/>
 		<remap from="camera0/image_raw" to="left/image_raw"/>
-		<remap from="camera1/image_raw" to="right/image_raw"/>
+		<remap from="camera1/image_raw" to="middle/image_raw"/>
+		<remap from="camera2/image_raw" to="right/image_raw"/>
 	</node>
 	<node pkg="image_view" type="image_view" name="sync_view">
 		<remap from="image" to="image_sync"/>

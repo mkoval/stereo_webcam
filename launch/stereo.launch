@@ -1,6 +1,6 @@
 <launch>
 	<group ns="stereo">
-		<include file="driver.launch"/>
+		<include file="$(find stereo_webcam)/launch/driver.launch"/>
 		<node pkg="stereo_mux" type="mux_node" name="stereo_mux">
 			<param name="fps" value="10"/>
 		</node>

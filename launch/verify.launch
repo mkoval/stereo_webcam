@@ -1,5 +1,5 @@
 <launch>
-	<include file="driver3.launch"/>
+	<include file="$(find stereo_webcam)/launch/driver.launch"/>
 	<node pkg="stereo_webcam" type="test_node.py" name="sync_test">
 		<param name="cameras" value="3"/>
 		<remap from="camera0/image_raw" to="left/image_raw"/>

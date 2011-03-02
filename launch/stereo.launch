@@ -3,6 +3,10 @@
 		<include file="$(find stereo_webcam)/launch/driver.launch"/>
 		<node pkg="stereo_mux" type="mux_node" name="stereo_mux">
 			<param name="fps" value="10"/>
+			<param name="info_nl" value="$(find stereo_webcam)/calibration/nl.yaml"/>
+			<param name="info_nr" value="$(find stereo_webcam)/calibration/nr.yaml"/>
+			<param name="info_wl" value="$(find stereo_webcam)/calibration/wl.yaml"/>
+			<param name="info_wr" value="$(find stereo_webcam)/calibration/wr.yaml"/>
 		</node>
 		<node pkg="stereo_image_proc" type="stereo_image_proc" name="stereo_proc">
 			<remap from="stereo" to="pseudo"/>

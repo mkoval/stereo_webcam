@@ -22,5 +22,4 @@ rosbuild_add_executable(stereo_node
 	src/CameraFrame.cpp
 	src/CameraFrameComparator.cpp
 	src/Webcam.cpp
-	src/TimeConverter.cpp
 )

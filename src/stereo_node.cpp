@@ -10,7 +10,6 @@
 
 #include "CameraFrame.hpp"
 #include "CameraFrameComparator.hpp"
-#include "TimeConverter.hpp"
 #include "Webcam.hpp"
 
 using sensor_msgs::CameraInfo;
@@ -47,13 +46,6 @@ int main(int argc, char **argv)
 	ros::init(argc, argv, "stereo_node");
 
 	ros::NodeHandle nh, nh_priv("~");
-
-	// Convert between system timestamps and ROS timestamps using a single pair
-	// of corresonding times.
-	ros::Time init_ros = ros::Time::now();
-	timeval   init_sys;
-	gettimeofday(&init_sys, NULL);
-	TimeConverter time_conv(init_sys, init_ros);
 
 	// Resolution and FPS are shared across all of the cameras.
 	int width, height, fps;
@@ -156,7 +148,7 @@ int main(int argc, char **argv)
 		// Publish all of the Image and CameraInfo messages using with the same
 		// timestamp to be matched with a TimeSynchronizer.
 		if (sync) {
-			ros::Time time = time_conv.SysToROS(frames[0].GetTimestamp());
+			ros::Time time = ros::Time::now();
 
 			for (int i = 0; i < cameras; ++i) {
 				CameraInfo info  = caminfo[i]->getCameraInfo();

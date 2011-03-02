@@ -4,12 +4,12 @@
 		<param name="device0" value="/dev/video_left"/>
 		<param name="device1" value="/dev/video_middle"/>
 		<param name="device2" value="/dev/video_right"/>
-		<param name="params0" value="file:///home/mckoval/calibration_320x240_left.yaml"/>
-		<param name="params1" value="file:///home/mckoval/calibration_320x240_middle.yaml"/>
-		<param name="params2" value="file:///home/mckoval/calibration_320x240_right.yaml"/>
+		<param name="params0" value="file:///home/mckoval/igvc/left.yaml"/>
+		<param name="params1" value="file:///home/mckoval/igvc/middle.yaml"/>
+		<param name="params2" value="file:///home/mckoval/igvc/right.yaml"/>
 
-		<param name="width"  value="320"/>
-		<param name="height" value="240"/>
+		<param name="width"  value="640"/>
+		<param name="height" value="480"/>
 		<param name="nbuf"   value="10"/>
 		<param name="fps"    value="10"/>
 

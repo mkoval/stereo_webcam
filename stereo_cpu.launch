@@ -1,9 +1,33 @@
 <launch>
 	<group ns="stereo">
-		<include file="driver.launch"/>
-		<node pkg="stereo_image_proc" type="stereo_image_proc" name="proc"/>
-	</group>
-	<node pkg="image_view" type="stereo_view" name="disparity_view">
-		<remap from="image" to="image_color"/>
+		<include file="driver3.launch"/>
+
+		<node pkg="stereo_switcher" type="switcher_node" name="stereo_mux">
+			<param name="fps" value="10"/>
+			<remap from="camera0/image_raw" to="left/image_raw"/>
+			<remap from="camera1/image_raw" to="middle/image_raw"/>
+			<remap from="camera2/image_raw" to="right/image_raw"/>
+			<remap from="camera0/camera_info" to="left/camera_info"/>
+			<remap from="camera1/camera_info" to="middle/camera_info"/>
+			<remap from="camera2/camera_info" to="right/camera_info"/>
+			<remap from="pseudo0/image" to="pseudo0/image_raw"/>
+			<remap from="pseudo1/image" to="pseudo1/image_raw"/>
+		</node>
+		<node pkg="stereo_image_proc" type="stereo_image_proc" name="stereo_proc">
+			<remap from="left/image_raw"    to="pseudo0/image_raw"/>
+			<remap from="right/image_raw"   to="pseudo1/image_raw"/>
+			<remap from="left/camera_info"  to="pseudo0/camera_info"/>
+			<remap from="right/camera_info" to="pseudo1/camera_info"/>
+		</node>
+	</group>w"
+	<node pkg="image_view" type="stereo_view" name="stereo_view">
+		<remap from="stereo/left/image"  to="stereo/pseudo0/image_raw"/>
+		<remap from="stereo/right/image" to="stereo/pseudo1/image_raw"/>
+	</node>
+	<node pkg="image_view" type="image_view" name="image0_view">
+		<remap from="image" to="stereo/pseudo0/image_raw"/>
+	</node>
+	<node pkg="image_view" type="image_view" name="image1_view">
+		<remap from="image" to="stereo/pseudo1/image_raw"/>
 	</node>
 </launch>

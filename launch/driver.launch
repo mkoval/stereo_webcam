@@ -20,4 +20,11 @@
 		<remap from="middle/image" to="middle/image_raw"/>
 		<remap from="right/image"  to="right/image_raw"/>
 	</node>
+	<node pkg="stereo_mux" type="mux_node" name="stereo_mux">
+		<param name="fps" value="10"/>
+		<param name="info_nl" value="file://$(find stereo_webcam)/calibration/nl.yaml"/>
+		<param name="info_nr" value="file://$(find stereo_webcam)/calibration/nr.yaml"/>
+		<param name="info_wl" value="file://$(find stereo_webcam)/calibration/wl.yaml"/>
+		<param name="info_wr" value="file://$(find stereo_webcam)/calibration/wr.yaml"/>
+	</node>
 </launch>

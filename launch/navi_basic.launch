@@ -1,0 +1,24 @@
+<launch>
+	<group ns="vision">
+		<group ns="narrow">
+			<node pkg="stereo_image_proc" type="stereo_image_proc" name="wide_proc">
+				<remap from="stereo" to="narrow"/>
+				<remap from="image"  to="image_color"/>
+				<remap from="left/image_raw"    to="left/image_raw"/>
+				<remap from="right/image_raw"   to="right/image_raw"/>
+				<remap from="left/camera_info"  to="left/camera_info"/>
+				<remap from="right/camera_info" to="right/camera_info"/>
+			</node>
+		</group>
+		<group ns="wide">
+			<node pkg="stereo_image_proc" type="stereo_image_proc" name="narrow_proc">
+				<remap from="stereo" to="narrow"/>
+				<remap from="image"  to="image_color"/>
+				<remap from="left/image_raw"    to="left/image_raw"/>
+				<remap from="right/image_raw"   to="right/image_raw"/>
+				<remap from="left/camera_info"  to="left/camera_info"/>
+				<remap from="right/camera_info" to="right/camera_info"/>
+			</node>
+		</group>
+	</group>
+</launch>

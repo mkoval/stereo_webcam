@@ -1,0 +1,33 @@
+<launch>
+	<group ns="stereo">
+		<include file="$(find stereo_webcam)/launch/driver.launch"/>
+		<group ns="narrow">
+			<node pkg="stereo_image_proc" type="stereo_image_proc" name="wide_proc">
+				<remap from="stereo" to="narrow"/>
+				<remap from="image"  to="image_color"/>
+				<remap from="left/image_raw"    to="left/image_raw"/>
+				<remap from="right/image_raw"   to="right/image_raw"/>
+				<remap from="left/camera_info"  to="left/camera_info"/>
+				<remap from="right/camera_info" to="right/camera_info"/>
+			</node>
+		</group>
+		<group ns="wide">
+			<node pkg="stereo_image_proc" type="stereo_image_proc" name="narrow_proc">
+				<remap from="stereo" to="narrow"/>
+				<remap from="image"  to="image_color"/>
+				<remap from="left/image_raw"    to="left/image_raw"/>
+				<remap from="right/image_raw"   to="right/image_raw"/>
+				<remap from="left/camera_info"  to="left/camera_info"/>
+				<remap from="right/camera_info" to="right/camera_info"/>
+			</node>
+		</group>
+	</group>
+	<node pkg="image_view" type="stereo_view" name="narrow_view">
+		<remap from="image" to="image_color"/>
+		<remap from="stereo" to="stereo/narrow"/>
+	</node>
+	<node pkg="image_view" type="stereo_view" name="wide_view">
+		<remap from="image" to="image_color"/>
+		<remap from="stereo" to="stereo/wide"/>
+	</node>
+</launch>

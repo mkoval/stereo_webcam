@@ -1,6 +1,6 @@
 <launch>
 	<include file="$(find stereo_webcam)/launch/driver.launch"/>
-	<node pkg="camera_calibration" type="cameracalibrator.py" name="calibrator" args="--size=8x6 --square=0.127">
+	<node pkg="camera_calibration" type="cameracalibrator.py" name="calibrator" args="--size=7x5 --square=0.127">
 		<remap from="left" to="narrow/left/image_raw"/>
 		<remap from="right" to="narrow/right/image_raw"/>
 		<remap from="left_camera" to="narrow/left"/>

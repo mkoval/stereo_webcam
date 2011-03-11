@@ -23,6 +23,7 @@ static int const def_height  = 480;
 static int const def_fps     = 30;
 static int const def_buffers = 2;
 static int const def_cameras = 1;
+static std::string def_frame = "camera_link";
 
 static Image FrameToImageMsg(CameraFrame const &src)
 {
@@ -48,15 +49,18 @@ int main(int argc, char **argv)
 	ros::NodeHandle nh, nh_priv("~");
 
 	// Resolution and FPS are shared across all of the cameras.
+	std::string frame_id;
 	int width, height, fps;
 	int buffers, cameras;
 	double threshold;
+
 	nh_priv.param("width",     width,     def_width);
 	nh_priv.param("height",    height,    def_height);
 	nh_priv.param("fps",       fps,       def_fps);
 	nh_priv.param("buffers",   buffers,   def_buffers);
 	nh_priv.param("cameras",   cameras,   def_cameras);
 	nh_priv.param("threshold", threshold, def_threshold);
+	nh_priv.param("frame",     frame_id,  def_frame);
 
 	// Load camera device names and calibration parameters per camera.
 	// XXX: Use a smart pointer type to avoid memory leaks.
@@ -89,6 +93,7 @@ int main(int argc, char **argv)
 		try {
 			cam[i] = new Webcam(path, buffers);
 		} catch (std::invalid_argument const &e) {
+			// TODO: Clean up the previously allocated memory.
 			ROS_ERROR("unable to open '%s'", path.c_str());
 			return 1;
 		}
@@ -103,6 +108,7 @@ int main(int argc, char **argv)
 			cam[i]->SetFPS(fps);
 			cam[i]->SetStreaming(true);
 		} catch (std::runtime_error const &e) {
+			// TODO: Clean up the previously allocated memory.
 			ROS_ERROR("resolution is not supported");
 			return 1;
 		} catch (std::invalid_argument const &e) {
@@ -157,8 +163,8 @@ int main(int argc, char **argv)
 				// TODO: Allow the user to specify frame_id with rosparams.
 				image.header.stamp    = time;
 				info.header.stamp     = time;
-				image.header.frame_id = "stereo_link";
-				info.header.frame_id  = "stereo_link";
+				image.header.frame_id = frame_id;
+				info.header.frame_id  = frame_id;
 				pub[i].publish(image, info);
 
 				// No camera is lagging; advance all frames equally.

@@ -1,9 +1,11 @@
 <launch>
-	<include file="$(find stereo_webcam)/launch/driver.launch"/>
-	<node pkg="camera_calibration" type="cameracalibrator.py" name="calibrator" args="--size=7x5 --square=0.127">
-		<remap from="left" to="wide/left/image_raw"/>
-		<remap from="right" to="wide/right/image_raw"/>
-		<remap from="left_camera" to="wide/left"/>
-		<remap from="right_camera" to="wide/right"/>
-	</node>
+	<include file="$(find stereo_webcam)/launch/navi_hardware.launch"/>
+	<group ns="vision">
+		<node pkg="camera_calibration" type="cameracalibrator.py" name="calibrator" args="--size=7x5 --square=0.127">
+			<remap from="left" to="wide/left/image_raw"/>
+			<remap from="right" to="wide/right/image_raw"/>
+			<remap from="left_camera" to="wide/left"/>
+			<remap from="right_camera" to="wide/right"/>
+		</node>
+	</group>
 </launch>

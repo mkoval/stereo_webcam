@@ -13,6 +13,7 @@
 		<param name="height" value="480"/>
 		<param name="nbuf"   value="10"/>
 		<param name="fps"    value="10"/>
+		<param name="frame"  value="camera_link"/>
 
 		<remap from="camera0" to="left"/>
 		<remap from="camera1" to="middle"/>

@@ -1,11 +1,10 @@
 <launch>
+	<arg name="camera"/>
 	<include file="$(find stereo_webcam)/launch/navi_hardware.launch"/>
 	<group ns="vision">
 		<node pkg="camera_calibration" type="cameracalibrator.py" name="calibrator" args="--size=5x3 --square=0.127">
-			<remap from="left" to="wide/left/image_raw"/>
-			<remap from="right" to="wide/right/image_raw"/>
-			<remap from="left_camera" to="wide/left"/>
-			<remap from="right_camera" to="wide/right"/>
+			<remap from="image"  to="$(arg camera)/image_raw"/>
+			<remap from="camera" to="$(arg camera)"/>
 		</node>
 	</group>
 </launch>

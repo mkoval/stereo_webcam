@@ -5,9 +5,9 @@
 		<param name="device0" value="/dev/video_left"/>
 		<param name="device1" value="/dev/video_middle"/>
 		<param name="device2" value="/dev/video_right"/>
-		<param name="params0" value="package://navi_bringup/mono_l.yaml"/>
-		<param name="params1" value="package://navi_bringup/mono_m.yaml"/>
-		<param name="params2" value="package://navi_bringup/mono_r.yaml"/>
+		<param name="params0" value="$(find navi_bringup)/calibration/mono_l.yaml"/>
+		<param name="params1" value="$(find navi_bringup)/calibration/mono_m.yaml"/>
+		<param name="params2" value="$(find navi_bringup)/calibration/mono_r.yaml"/>
 
 		<param name="width"  value="640"/>
 		<param name="height" value="480"/>
@@ -24,10 +24,10 @@
 	</node>
 	<node pkg="stereo_mux" type="mux_node" name="stereo_mux">
 		<param name="fps" value="10"/>
-		<param name="info_nl" value="package://navi_bringup/calibration/stereo_nl.yaml"/>
-		<param name="info_nr" value="package://navi_bringup/calibration/stereo_nr.yaml"/>
-		<param name="info_wl" value="package://navi_bringup/calibration/stereo_wl.yaml"/>
-		<param name="info_wr" value="package://navi_bringup/calibration/stereo_wr.yaml"/>
+		<param name="info_nl" value="$(find navi_bringup)/calibration/stereo_nl.yaml"/>
+		<param name="info_nr" value="$(find navi_bringup)/calibration/stereo_nr.yaml"/>
+		<param name="info_wl" value="$(find navi_bringup)/calibration/stereo_wl.yaml"/>
+		<param name="info_wr" value="$(find navi_bringup)/calibration/stereo_wr.yaml"/>
 	</node>
 	</group>
 </launch>

@@ -62,6 +62,23 @@ int main(int argc, char **argv)
 	nh_priv.param("threshold", threshold, def_threshold);
 	nh_priv.param("frame",     frame_id,  def_frame);
 
+	bool freq_filter;
+	bool vflip, hflip;
+	bool auto_exposure, auto_gain, auto_white;
+	int brightness, sharpness, contrast, exposure, gain;
+
+	nh_priv.param<bool>("auto_exposure", auto_exposure, true);
+	nh_priv.param<bool>("auto_gain",     auto_gain,     true);
+	nh_priv.param<bool>("auto_white",    auto_white,    true);
+	nh_priv.param<bool>("freq_filter",   freq_filter,   false);
+	nh_priv.param<bool>("vflip",         vflip,         false);
+	nh_priv.param<bool>("hflip",         hflip,         false);
+	nh_priv.param<int>("brightness", brightness, 0);
+	nh_priv.param<int>("sharpness",  sharpness,  0);
+	nh_priv.param<int>("exposure",   exposure,   120);
+	nh_priv.param<int>("contrast",   contrast,   32);
+	nh_priv.param<int>("gain",       gain,       20);
+
 	// Load camera device names and calibration parameters per camera.
 	// XXX: Use a smart pointer type to avoid memory leaks.
 	std::vector<CameraPublisher>     pub(cameras);
@@ -115,6 +132,18 @@ int main(int argc, char **argv)
 			ROS_ERROR("fps is not supported at this resolution");
 			return 1;
 		}
+	}
+
+	for (int i = 0; i < cameras; ++i) {
+		cam[i]->SetControl(V4L2_CID_AUTOGAIN,           auto_gain);
+		cam[i]->SetControl(V4L2_CID_AUTO_WHITE_BALANCE, auto_white);
+		cam[i]->SetControl(V4L2_CID_HFLIP,              hflip);
+		cam[i]->SetControl(V4L2_CID_VFLIP,              vflip);
+		cam[i]->SetControl(V4L2_CID_BRIGHTNESS, brightness);
+		cam[i]->SetControl(V4L2_CID_SHARPNESS,  sharpness);
+		cam[i]->SetControl(V4L2_CID_EXPOSURE,   exposure);
+		cam[i]->SetControl(V4L2_CID_CONTRAST,   contrast);
+		cam[i]->SetControl(V4L2_CID_GAIN,       gain);
 	}
 
 	// TODO: Dynamically select this threshold using the FPS.

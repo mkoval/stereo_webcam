@@ -259,6 +259,17 @@ void Webcam::SetParam(v4l2_streamparm &param) {
 	}
 }
 
+void Webcam::SetControl(int type, int value) {
+	v4l2_control ctrl;
+	ctrl.id    = type;
+	ctrl.value = value;
+	int ret = ioctl(m_fd, VIDIOC_S_CTRL, &ctrl);
+
+	if (ret == -1) {
+		throw std::runtime_error("unable to change device control");
+	}
+}
+
 void Webcam::GetFormat(v4l2_format &fmt) {
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	int ret = ioctl(m_fd, VIDIOC_G_FMT, &fmt);

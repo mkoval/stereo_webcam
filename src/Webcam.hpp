@@ -37,6 +37,8 @@ public:
 	uint32_t GetHeight(void) const;
 	void SetResolution(uint32_t width, uint32_t height);
 
+	void SetControl(int type, int value);
+
 	CameraFrame &GetFrame(CameraFrame &frame);
 
 	std::list<std::string> GetControls(void) const;

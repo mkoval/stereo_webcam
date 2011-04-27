@@ -24,14 +24,6 @@ using sensor_msgs::Image;
 using image_transport::CameraPublisher;
 using image_transport::ImageTransport;
 
-static double const def_threshold = 0.005;
-static int const def_width   = 640;
-static int const def_height  = 480;
-static int const def_fps     = 30;
-static int const def_buffers = 2;
-static int const def_cameras = 1;
-static std::string def_frame = "camera_link";
-
 class WebcamNode {
 public:
 	WebcamNode(ros::NodeHandle nh, ros::NodeHandle nh_priv);

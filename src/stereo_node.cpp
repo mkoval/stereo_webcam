@@ -21,8 +21,6 @@ using namespace stereo_webcam;
 
 using sensor_msgs::CameraInfo;
 using sensor_msgs::Image;
-using image_transport::CameraPublisher;
-using image_transport::ImageTransport;
 
 class WebcamNode {
 public:

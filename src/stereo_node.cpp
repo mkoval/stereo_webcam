@@ -3,14 +3,19 @@
 
 #include <ros/ros.h>
 #include <camera_info_manager/camera_info_manager.h>
+#include <dynamic_reconfigure/server.h>
 #include <image_transport/image_transport.h>
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/Image.h>
+#include <stereo_webcam/StereoWebcamConfig.h>
 
 #include "CameraFrame.hpp"
 #include "CameraFrameComparator.hpp"
 #include "Webcam.hpp"
+
+namespace dr = dynamic_reconfigure;
+using namespace stereo_webcam;
 
 using sensor_msgs::CameraInfo;
 using sensor_msgs::Image;
@@ -40,6 +45,21 @@ static Image FrameToImageMsg(CameraFrame const &src)
 		msg.data[i] = data[i];
 	}
 	return msg;
+}
+
+void ReconfigureCallback(StereoWebcamConfig &config, uint32_t level)
+{
+#if 0
+	cam[i]->SetControl(V4L2_CID_AUTOGAIN,           auto_gain);
+	cam[i]->SetControl(V4L2_CID_AUTO_WHITE_BALANCE, auto_white);
+	cam[i]->SetControl(V4L2_CID_HFLIP,              hflip);
+	cam[i]->SetControl(V4L2_CID_VFLIP,              vflip);
+	cam[i]->SetControl(V4L2_CID_BRIGHTNESS, brightness);
+	cam[i]->SetControl(V4L2_CID_SHARPNESS,  sharpness);
+	cam[i]->SetControl(V4L2_CID_EXPOSURE,   exposure);
+	cam[i]->SetControl(V4L2_CID_CONTRAST,   contrast);
+	cam[i]->SetControl(V4L2_CID_GAIN,       gain);
+#endif
 }
 
 int main(int argc, char **argv)
@@ -78,6 +98,11 @@ int main(int argc, char **argv)
 	nh_priv.param<int>("exposure",   exposure,   120);
 	nh_priv.param<int>("contrast",   contrast,   32);
 	nh_priv.param<int>("gain",       gain,       20);
+
+	// Setup dynamic_reconfigure for driver settings.
+	dr::Server<StereoWebcamConfig> dr_srv;
+	dr::Server<StereoWebcamConfig>::CallbackType dr_cb = boost::bind(&ReconfigureCallback, _1, _2);
+	dr_srv.setCallback(dr_cb);
 
 	// Load camera device names and calibration parameters per camera.
 	// XXX: Use a smart pointer type to avoid memory leaks.

@@ -82,9 +82,6 @@ void WebcamNode::onInit(void)
 	nh_priv.param<double>("fps",       m_fps,       30);
 	nh_priv.param<double>("threshold", m_threshold, 0.05);
 
-	// Use dynamic_reconfigure to get all other parameters.
-	m_srv_dr.setCallback(boost::bind(&WebcamNode::ReconfigureCallback, this, _1, _2));
-
 	m_comparator = boost::make_shared<CameraFrameComparator>(m_threshold);
 	m_cams.resize(m_num);
 
@@ -105,6 +102,9 @@ void WebcamNode::onInit(void)
 		ros::NodeHandle nh_cam(nh, "camera" + id);
 		InitializeWebcam(nh_cam, path_dev, path_cal, m_cams[i]);
 	}
+
+	// Use dynamic_reconfigure to get all other parameters.
+	m_srv_dr.setCallback(boost::bind(&WebcamNode::ReconfigureCallback, this, _1, _2));
 }
 
 void WebcamNode::SpinOnce(void)
@@ -185,6 +185,7 @@ void WebcamNode::InitializeWebcam(ros::NodeHandle ns, std::string path_dev, std:
 	webcam.pub     = it.advertiseCamera("image", 1);
 	webcam.manager = boost::make_shared<CameraInfoManager>(ns, "", path_cal);
 	webcam.driver  = boost::make_shared<Webcam>(path_dev, m_buffers);
+	webcam.frame   = boost::make_shared<CameraFrame>();
 	webcam.advance = false;
 
 	webcam.driver->SetResolution(m_width, m_height);
@@ -219,6 +220,7 @@ int main(int argc, char **argv)
 	// Setup dynamic_reconfigure for runtime settings.
 
 	WebcamNode node(nh, nh_priv);
+	node.onInit();
 
 	while (ros::ok()) {
 		node.SpinOnce();

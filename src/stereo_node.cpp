@@ -15,6 +15,8 @@
 #include "Webcam.hpp"
 
 namespace dr = dynamic_reconfigure;
+namespace it = image_transport;
+
 using namespace stereo_webcam;
 
 using sensor_msgs::CameraInfo;
@@ -30,7 +32,167 @@ static int const def_buffers = 2;
 static int const def_cameras = 1;
 static std::string def_frame = "camera_link";
 
-static Image FrameToImageMsg(CameraFrame const &src)
+class WebcamNode {
+public:
+	WebcamNode(ros::NodeHandle nh, ros::NodeHandle nh_priv);
+	void onInit(void);
+	void SpinOnce(void);
+	void ReconfigureCallback(StereoWebcamConfig &config, int32_t level);
+
+private:
+	struct InternalWebcam {
+		image_transport::CameraPublisher     pub;
+		boost::shared_ptr<CameraInfoManager> manager;
+		boost::shared_ptr<Webcam>            driver;
+		boost::shared_ptr<CameraFrame>       frame;
+		std::string frame_id;
+		bool        advance;
+	};
+
+	ros::NodeHandle nh;
+	ros::NodeHandle nh_priv;
+
+	int m_num;
+	int m_width, m_height;
+	int m_buffers;
+	double m_fps;
+	double m_threshold;
+
+	std::vector<InternalWebcam>              m_cams;
+	boost::shared_ptr<CameraFrameComparator> m_comparator;
+	dr::Server<StereoWebcamConfig>           m_srv_dr;
+
+	void InitializeWebcam(ros::NodeHandle ns, std::string path_dev, std::string path_cal, InternalWebcam &webcam) const;
+	Image FrameToImageMsg(CameraFrame const &src) const;
+};
+
+WebcamNode::WebcamNode(ros::NodeHandle nh, ros::NodeHandle nh_priv)
+{
+	this->nh      = nh;
+	this->nh_priv = nh_priv;
+}
+
+void WebcamNode::onInit(void)
+{
+	// Parameters that are fixed at runtime.
+	nh_priv.param<int>("cameras", m_num,     0);
+	nh_priv.param<int>("width",   m_width,   640);
+	nh_priv.param<int>("height",  m_height,  480);
+	nh_priv.param<int>("buffers", m_buffers, 10);
+	nh_priv.param<double>("fps",       m_fps,       30);
+	nh_priv.param<double>("threshold", m_threshold, 0.05);
+
+	// Use dynamic_reconfigure to get all other parameters.
+	m_srv_dr.setCallback(boost::bind(&WebcamNode::ReconfigureCallback, this, _1, _2));
+
+	m_comparator = boost::make_shared<CameraFrameComparator>(m_threshold);
+	m_cams.resize(m_num);
+
+	for (int i = 0; i < m_num; ++i) {
+		std::stringstream ss;
+		std::string id;
+
+		ss << i;
+		id = ss.str();
+
+		// Path to the camera's device file and calibration parameters.
+		std::string path_dev, path_cal;
+		nh_priv.param<std::string>("device" + id, path_dev,           "");
+		nh_priv.param<std::string>("params" + id, path_cal,           "");
+		nh_priv.param<std::string>("frame"  + id, m_cams[i].frame_id, "");
+
+		// TODO: Handle exceptions.
+		ros::NodeHandle nh_cam(nh, "camera" + id);
+		InitializeWebcam(nh_cam, path_dev, path_cal, m_cams[i]);
+	}
+}
+
+void WebcamNode::SpinOnce(void)
+{
+	size_t newest = 0;
+	bool   sync   = true;
+
+	// Resynchronize advancing lagging cameras.
+	for (int i = 0; i < m_num; ++i) {
+		if (m_cams[i].advance) {
+			m_cams[i].driver->GetFrame(*m_cams[i].frame);
+		}
+		m_cams[i].advance = false;
+	}
+
+	// Select the most recent frame of all cameras.
+	for (int i = 1; i < m_num; ++i) {
+		int order = m_comparator->Compare(*m_cams[i].frame, *m_cams[newest].frame);
+		if (order > 0) {
+			newest = i;
+		}
+	}
+
+	// Advance all cameras that are sufficiently lagging the newest frame.
+	for (int i = 0; i < m_num; ++i) {
+		int order = m_comparator->Compare(*m_cams[i].frame, *m_cams[newest].frame);
+		if (order < 0) {
+			m_cams[i].advance = true;
+			sync = false;
+			ROS_WARN("dropping frame from camera %d", i);
+		}
+	}
+
+	// Publish all of the Image and CameraInfo messages using with the same
+	// timestamp. This allows them to be matched with TimeSynchronizer
+	// without using the approximate policy.
+	if (sync) {
+		ros::Time time = ros::Time::now();
+
+		for (int i = 0; i < m_num; ++i) {
+			CameraInfo info  = m_cams[i].manager->getCameraInfo();
+			Image      image = FrameToImageMsg(*m_cams[i].frame);
+
+			image.header.stamp = time;
+			info.header.stamp  = time;
+			image.header.frame_id = m_cams[i].frame_id;
+			info.header.frame_id  = m_cams[i].frame_id;
+			m_cams[i].pub.publish(image, info);
+
+			// No camera is lagging; advance all frames equally.
+			for (int i = 0; i < m_num; ++i) {
+				m_cams[i].advance = true;
+			}
+		}
+	}
+}
+
+void WebcamNode::ReconfigureCallback(StereoWebcamConfig &config, int32_t level)
+{
+	for (int i = 0; i < m_num; ++i) {
+		m_cams[i].driver->SetControl(V4L2_CID_AUTOGAIN,           config.auto_gain);
+		m_cams[i].driver->SetControl(V4L2_CID_AUTO_WHITE_BALANCE, config.auto_white);
+		m_cams[i].driver->SetControl(V4L2_CID_HFLIP,              config.hflip);
+		m_cams[i].driver->SetControl(V4L2_CID_VFLIP,              config.vflip);
+		m_cams[i].driver->SetControl(V4L2_CID_BRIGHTNESS,         config.brightness);
+		m_cams[i].driver->SetControl(V4L2_CID_SHARPNESS,          config.sharpness);
+		m_cams[i].driver->SetControl(V4L2_CID_EXPOSURE,           config.exposure);
+		m_cams[i].driver->SetControl(V4L2_CID_CONTRAST,           config.contrast);
+		m_cams[i].driver->SetControl(V4L2_CID_GAIN,               config.gain);
+	}
+}
+
+void WebcamNode::InitializeWebcam(ros::NodeHandle ns, std::string path_dev, std::string path_cal,
+                                  InternalWebcam &webcam) const
+{
+	it::ImageTransport it(ns);
+
+	webcam.pub     = it.advertiseCamera("image", 1);
+	webcam.manager = boost::make_shared<CameraInfoManager>(ns, "", path_cal);
+	webcam.driver  = boost::make_shared<Webcam>(path_dev, m_buffers);
+	webcam.advance = false;
+
+	webcam.driver->SetResolution(m_width, m_height);
+	webcam.driver->SetFPS(m_fps);
+	webcam.driver->SetStreaming(true);
+}
+
+Image WebcamNode::FrameToImageMsg(CameraFrame const &src) const
 {
 	Image msg;
 	msg.width    = src.GetWidth();
@@ -47,186 +209,19 @@ static Image FrameToImageMsg(CameraFrame const &src)
 	return msg;
 }
 
-void ReconfigureCallback(StereoWebcamConfig &config, uint32_t level)
-{
-#if 0
-	cam[i]->SetControl(V4L2_CID_AUTOGAIN,           auto_gain);
-	cam[i]->SetControl(V4L2_CID_AUTO_WHITE_BALANCE, auto_white);
-	cam[i]->SetControl(V4L2_CID_HFLIP,              hflip);
-	cam[i]->SetControl(V4L2_CID_VFLIP,              vflip);
-	cam[i]->SetControl(V4L2_CID_BRIGHTNESS, brightness);
-	cam[i]->SetControl(V4L2_CID_SHARPNESS,  sharpness);
-	cam[i]->SetControl(V4L2_CID_EXPOSURE,   exposure);
-	cam[i]->SetControl(V4L2_CID_CONTRAST,   contrast);
-	cam[i]->SetControl(V4L2_CID_GAIN,       gain);
-#endif
-}
-
 int main(int argc, char **argv)
 {
 	ros::init(argc, argv, "stereo_node");
 
-	ros::NodeHandle nh, nh_priv("~");
+	ros::NodeHandle nh;
+	ros::NodeHandle nh_priv("~");
 
-	// Resolution and FPS are shared across all of the cameras.
-	std::string frame_id;
-	int width, height, fps;
-	int buffers, cameras;
-	double threshold;
+	// Setup dynamic_reconfigure for runtime settings.
 
-	nh_priv.param("width",     width,     def_width);
-	nh_priv.param("height",    height,    def_height);
-	nh_priv.param("fps",       fps,       def_fps);
-	nh_priv.param("buffers",   buffers,   def_buffers);
-	nh_priv.param("cameras",   cameras,   def_cameras);
-	nh_priv.param("threshold", threshold, def_threshold);
-	nh_priv.param("frame",     frame_id,  def_frame);
-
-	bool freq_filter;
-	bool vflip, hflip;
-	bool auto_exposure, auto_gain, auto_white;
-	int brightness, sharpness, contrast, exposure, gain;
-
-	nh_priv.param<bool>("auto_exposure", auto_exposure, true);
-	nh_priv.param<bool>("auto_gain",     auto_gain,     true);
-	nh_priv.param<bool>("auto_white",    auto_white,    true);
-	nh_priv.param<bool>("freq_filter",   freq_filter,   false);
-	nh_priv.param<bool>("vflip",         vflip,         false);
-	nh_priv.param<bool>("hflip",         hflip,         false);
-	nh_priv.param<int>("brightness", brightness, 0);
-	nh_priv.param<int>("sharpness",  sharpness,  0);
-	nh_priv.param<int>("exposure",   exposure,   120);
-	nh_priv.param<int>("contrast",   contrast,   32);
-	nh_priv.param<int>("gain",       gain,       20);
-
-	// Setup dynamic_reconfigure for driver settings.
-	dr::Server<StereoWebcamConfig> dr_srv;
-	dr::Server<StereoWebcamConfig>::CallbackType dr_cb = boost::bind(&ReconfigureCallback, _1, _2);
-	dr_srv.setCallback(dr_cb);
-
-	// Load camera device names and calibration parameters per camera.
-	// XXX: Use a smart pointer type to avoid memory leaks.
-	std::vector<CameraPublisher>     pub(cameras);
-	std::vector<CameraInfoManager *> caminfo(cameras);
-	std::vector<Webcam *>            cam(cameras);
-
-	for (int i = 0; i < cameras; ++i) {
-		std::stringstream ss;
-		std::string id, path, info;
-
-		ss << i;
-		id = ss.str();
-
-		// Path to the camera's device file and calibration parameters.
-		// XXX: Find a more elegant way of doing this using lists or dicts.
-		bool ok = nh_priv.getParam("device" + id, path);
-		nh_priv.getParam("params" + id, info);
-
-		if (!ok) {
-			ROS_ERROR("missing device path for camera %d", i);
-			return 1;
-		}
-
-		ros::NodeHandle nh_cam("camera" + id);
-		ImageTransport  it(nh_cam);
-		pub[i]     = it.advertiseCamera("image", 1);
-		caminfo[i] = new CameraInfoManager(nh_cam, "", info);
-
-		try {
-			cam[i] = new Webcam(path, buffers);
-		} catch (std::invalid_argument const &e) {
-			// TODO: Clean up the previously allocated memory.
-			ROS_ERROR("unable to open '%s'", path.c_str());
-			return 1;
-		}
-
-		if (!caminfo[i]->isCalibrated()) {
-			ROS_WARN("camera %d is not calibrated", i);
-		}
-
-		// Negotiate the resolution, failing if not supported.
-		try {
-			cam[i]->SetResolution(width, height);
-			cam[i]->SetFPS(fps);
-			cam[i]->SetStreaming(true);
-		} catch (std::runtime_error const &e) {
-			// TODO: Clean up the previously allocated memory.
-			ROS_ERROR("resolution is not supported");
-			return 1;
-		} catch (std::invalid_argument const &e) {
-			ROS_ERROR("fps is not supported at this resolution");
-			return 1;
-		}
-	}
-
-	for (int i = 0; i < cameras; ++i) {
-		cam[i]->SetControl(V4L2_CID_AUTOGAIN,           auto_gain);
-		cam[i]->SetControl(V4L2_CID_AUTO_WHITE_BALANCE, auto_white);
-		cam[i]->SetControl(V4L2_CID_HFLIP,              hflip);
-		cam[i]->SetControl(V4L2_CID_VFLIP,              vflip);
-		cam[i]->SetControl(V4L2_CID_BRIGHTNESS, brightness);
-		cam[i]->SetControl(V4L2_CID_SHARPNESS,  sharpness);
-		cam[i]->SetControl(V4L2_CID_EXPOSURE,   exposure);
-		cam[i]->SetControl(V4L2_CID_CONTRAST,   contrast);
-		cam[i]->SetControl(V4L2_CID_GAIN,       gain);
-	}
-
-	// TODO: Dynamically select this threshold using the FPS.
-	CameraFrameComparator    comp(0.0005);
-	std::vector<CameraFrame> frames(cameras);
-	std::vector<bool>        advance(cameras, true);
+	WebcamNode node(nh, nh_priv);
 
 	while (ros::ok()) {
-		bool sync = true;
-
-		// Resynchronize frames by advancing lagging cameras.
-		for (int i = 0; i < cameras; ++i) {
-			if (advance[i]) {
-				cam[i]->GetFrame(frames[i]);
-			}
-			advance[i] = false;
-		}
-
-		// Select the most recent frame of all cameras.
-		size_t newest = 0;
-		for (int i = 1; i < cameras; ++i) {
-			int order = comp.Compare(frames[i], frames[newest]);
-			if (order > 0)
-				newest = i;
-		}
-
-		// Advance all cameras that are lagging the most recent frame.
-		for (int i = 0; i < cameras; ++i) {
-			int order = comp.Compare(frames[i], frames[newest]);
-			if (order < 0) {
-				advance[i] = true;
-				sync       = false;
-				ROS_WARN("dropping frame from camera %d", i);
-			}
-		}
-
-		// Publish all of the Image and CameraInfo messages using with the same
-		// timestamp to be matched with a TimeSynchronizer.
-		if (sync) {
-			ros::Time time = ros::Time::now();
-
-			for (int i = 0; i < cameras; ++i) {
-				CameraInfo info  = caminfo[i]->getCameraInfo();
-				Image      image = FrameToImageMsg(frames[i]);
-
-				// TODO: Allow the user to specify frame_id with rosparams.
-				image.header.stamp    = time;
-				info.header.stamp     = time;
-				image.header.frame_id = frame_id;
-				info.header.frame_id  = frame_id;
-				pub[i].publish(image, info);
-
-				// No camera is lagging; advance all frames equally.
-				for (int i = 0; i < cameras; ++i) {
-					advance[i] = true;
-				}
-			}
-		}
+		node.SpinOnce();
 		ros::spinOnce();
 	}
 	return 0;

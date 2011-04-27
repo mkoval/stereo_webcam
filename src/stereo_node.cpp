@@ -1,61 +1,8 @@
-#include <exception>
-#include <string>
-
-#include <ros/ros.h>
-#include <camera_info_manager/camera_info_manager.h>
-#include <dynamic_reconfigure/server.h>
 #include <image_transport/image_transport.h>
 #include <sensor_msgs/image_encodings.h>
-#include <sensor_msgs/CameraInfo.h>
-#include <sensor_msgs/Image.h>
-#include <stereo_webcam/StereoWebcamConfig.h>
+#include "stereo_node.hpp"
 
-#include "CameraFrame.hpp"
-#include "CameraFrameComparator.hpp"
-#include "Webcam.hpp"
-
-namespace dr = dynamic_reconfigure;
-namespace it = image_transport;
-
-using namespace stereo_webcam;
-
-using sensor_msgs::CameraInfo;
-using sensor_msgs::Image;
-
-class WebcamNode {
-public:
-	WebcamNode(ros::NodeHandle nh, ros::NodeHandle nh_priv);
-	~WebcamNode(void);
-	void onInit(void);
-	void SpinOnce(void);
-	void ReconfigureCallback(StereoWebcamConfig &config, int32_t level);
-
-private:
-	struct InternalWebcam {
-		image_transport::CameraPublisher     pub;
-		boost::shared_ptr<CameraInfoManager> manager;
-		boost::shared_ptr<Webcam>            driver;
-		boost::shared_ptr<CameraFrame>       frame;
-		std::string frame_id;
-		bool        advance;
-	};
-
-	ros::NodeHandle nh;
-	ros::NodeHandle nh_priv;
-
-	int m_num;
-	int m_width, m_height;
-	int m_buffers;
-	double m_fps;
-	double m_threshold;
-
-	std::vector<InternalWebcam>              m_cams;
-	boost::shared_ptr<CameraFrameComparator> m_comparator;
-	dr::Server<StereoWebcamConfig>           m_srv_dr;
-
-	void InitializeWebcam(ros::NodeHandle ns, std::string path_dev, std::string path_cal, InternalWebcam &webcam) const;
-	Image FrameToImageMsg(CameraFrame const &src) const;
-};
+namespace stereo_webcam {
 
 WebcamNode::WebcamNode(ros::NodeHandle nh, ros::NodeHandle nh_priv)
 {
@@ -210,6 +157,8 @@ Image WebcamNode::FrameToImageMsg(CameraFrame const &src) const
 	return msg;
 }
 
+};
+
 int main(int argc, char **argv)
 {
 	ros::init(argc, argv, "stereo_node");
@@ -218,8 +167,7 @@ int main(int argc, char **argv)
 	ros::NodeHandle nh_priv("~");
 
 	// Setup dynamic_reconfigure for runtime settings.
-
-	WebcamNode node(nh, nh_priv);
+	stereo_webcam::WebcamNode node(nh, nh_priv);
 	node.onInit();
 
 	while (ros::ok()) {

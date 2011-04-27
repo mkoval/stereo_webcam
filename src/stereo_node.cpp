@@ -35,6 +35,7 @@ static std::string def_frame = "camera_link";
 class WebcamNode {
 public:
 	WebcamNode(ros::NodeHandle nh, ros::NodeHandle nh_priv);
+	~WebcamNode(void);
 	void onInit(void);
 	void SpinOnce(void);
 	void ReconfigureCallback(StereoWebcamConfig &config, int32_t level);
@@ -70,6 +71,15 @@ WebcamNode::WebcamNode(ros::NodeHandle nh, ros::NodeHandle nh_priv)
 {
 	this->nh      = nh;
 	this->nh_priv = nh_priv;
+}
+
+WebcamNode::~WebcamNode(void)
+{
+	for (int i = 0; i < m_num; ++i) {
+		if (m_cams[i].driver) {
+			m_cams[i].driver->SetStreaming(false);
+		}
+	}
 }
 
 void WebcamNode::onInit(void)

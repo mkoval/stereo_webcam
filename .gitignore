@@ -1,2 +1,6 @@
 bin/
 build/
+cfg/cpp/
+docs/
+src/stereo_webcam
+*.cfgc

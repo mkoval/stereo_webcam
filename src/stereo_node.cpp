@@ -129,7 +129,7 @@ void WebcamNode::InitializeWebcam(ros::NodeHandle ns, std::string path_dev, std:
 {
 	it::ImageTransport it(ns);
 
-	webcam.pub     = it.advertiseCamera("image", 1);
+	webcam.pub     = it.advertiseCamera("image_raw", 1);
 	webcam.manager = boost::make_shared<CameraInfoManager>(ns, "", path_cal);
 	webcam.driver  = boost::make_shared<Webcam>(path_dev, m_buffers);
 	webcam.frame   = boost::make_shared<CameraFrame>();

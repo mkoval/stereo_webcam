@@ -128,8 +128,9 @@ void WebcamNode::ReconfigureCallback(StereoWebcamConfig &config, int32_t level)
 void WebcamNode::InitializeWebcam(std::string base, std::string path_dev, std::string path_cal,
                                   InternalWebcam &webcam) const
 {
+	ros::NodeHandle nh_cam(nh, base + "/camera_info");
 	webcam.pub     = m_it->advertiseCamera(base + "/image", 1);
-	webcam.manager = boost::make_shared<CameraInfoManager>(nh, "", path_cal);
+	webcam.manager = boost::make_shared<CameraInfoManager>(nh_cam, "", path_cal);
 	webcam.driver  = boost::make_shared<Webcam>(path_dev, m_buffers);
 	webcam.frame   = boost::make_shared<CameraFrame>();
 	webcam.advance = false;

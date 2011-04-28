@@ -51,10 +51,11 @@ private:
 	double m_threshold;
 
 	std::vector<InternalWebcam>              m_cams;
-	boost::shared_ptr<CameraFrameComparator> m_comparator;
 	dr::Server<StereoWebcamConfig>           m_srv_dr;
+	boost::shared_ptr<CameraFrameComparator> m_comparator;
+	boost::shared_ptr<it::ImageTransport>    m_it;
 
-	void InitializeWebcam(ros::NodeHandle ns, std::string path_dev, std::string path_cal, InternalWebcam &webcam) const;
+	void InitializeWebcam(std::string base, std::string path_dev, std::string path_cal, InternalWebcam &webcam) const;
 	Image FrameToImageMsg(CameraFrame const &src) const;
 };
 

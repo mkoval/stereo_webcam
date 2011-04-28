@@ -29,6 +29,7 @@ void WebcamNode::onInit(void)
 	nh_priv.param<double>("fps",       m_fps,       30);
 	nh_priv.param<double>("threshold", m_threshold, 0.05);
 
+	m_it         = boost::make_shared<it::ImageTransport>(nh);
 	m_comparator = boost::make_shared<CameraFrameComparator>(m_threshold);
 	m_cams.resize(m_num);
 
@@ -46,8 +47,8 @@ void WebcamNode::onInit(void)
 		nh_priv.param<std::string>("frame"  + id, m_cams[i].frame_id, "");
 
 		// TODO: Handle exceptions.
-		ros::NodeHandle nh_cam(nh, "camera" + id);
-		InitializeWebcam(nh_cam, path_dev, path_cal, m_cams[i]);
+		std::string base_topic = nh.resolveName("camera" + id);
+		InitializeWebcam(base_topic, path_dev, path_cal, m_cams[i]);
 	}
 
 	// Use dynamic_reconfigure to get all other parameters.
@@ -124,13 +125,11 @@ void WebcamNode::ReconfigureCallback(StereoWebcamConfig &config, int32_t level)
 	}
 }
 
-void WebcamNode::InitializeWebcam(ros::NodeHandle ns, std::string path_dev, std::string path_cal,
+void WebcamNode::InitializeWebcam(std::string base, std::string path_dev, std::string path_cal,
                                   InternalWebcam &webcam) const
 {
-	it::ImageTransport it(ns);
-
-	webcam.pub     = it.advertiseCamera("image", 1);
-	webcam.manager = boost::make_shared<CameraInfoManager>(ns, "", path_cal);
+	webcam.pub     = m_it->advertiseCamera(base + "/image", 1);
+	webcam.manager = boost::make_shared<CameraInfoManager>(nh, "", path_cal);
 	webcam.driver  = boost::make_shared<Webcam>(path_dev, m_buffers);
 	webcam.frame   = boost::make_shared<CameraFrame>();
 	webcam.advance = false;

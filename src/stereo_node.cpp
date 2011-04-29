@@ -43,7 +43,7 @@ void WebcamNode::onInit(void)
 		// Path to the camera's device file and calibration parameters.
 		std::string path_dev, path_cal;
 		nh_priv.param<std::string>("device" + id, path_dev,           "");
-		nh_priv.param<std::string>("params" + id, path_cal,           "");
+		nh_priv.param<std::string>("calib"  + id, path_cal,           "");
 		nh_priv.param<std::string>("frame"  + id, m_cams[i].frame_id, "");
 
 		// TODO: Handle exceptions.

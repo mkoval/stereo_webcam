@@ -12,7 +12,7 @@ from sensor_msgs.msg import Image, CameraInfo
 pub_image = rospy.Publisher('image_sync', Image)
 
 def CreateImageSub(i):
-	topic      = 'camera{0}/image_raw'.format(i)
+	topic      = 'camera{0}/image'.format(i)
 	subscriber = message_filters.Subscriber(topic, Image)
 	return subscriber
 

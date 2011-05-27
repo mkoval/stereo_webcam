@@ -1,13 +1,17 @@
 <launch>
-	<group ns="vision">
-		<node pkg="stereo_webcam" type="test_node.py" name="sync_test">
-			<param name="cameras" value="3"/>
-			<remap from="camera0/image_raw" to="left/image_raw"/>
-			<remap from="camera1/image_raw" to="middle/image_raw"/>
-			<remap from="camera2/image_raw" to="right/image_raw"/>
-		</node>
-		<node pkg="image_view" type="image_view" name="sync_view">
-			<remap from="image" to="image_sync"/>
-		</node>
-	</group>
+	<node pkg="stereo_webcam" type="stereo_node" name="camera_front">
+		<rosparam command="load" file="$(find navi_cfg)/params/camera_general.yaml"/>
+		<param name="cameras" value="3"/>
+		<param name="device0" value="/dev/video0"/>
+		<param name="device1" value="/dev/video1"/>
+		<param name="device2" value="/dev/video2"/>
+		<param name="width"  value="640"/>
+		<param name="height" value="480"/>
+	</node>
+	<node pkg="stereo_webcam" type="test_node.py" name="sync_test">
+		<param name="cameras" value="3"/>
+	</node>
+	<node pkg="image_view" type="image_view" name="sync_view">
+		<remap from="image" to="image_sync"/>
+	</node>
 </launch>
